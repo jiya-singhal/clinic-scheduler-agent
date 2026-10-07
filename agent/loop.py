@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 from datetime import datetime
@@ -15,7 +16,7 @@ from agent.state import ConversationState, apply
 from agent.tools import TOOL_SCHEMAS, dispatch
 
 MAX_TOOL_CALLS = 4
-MODEL = "gemini-2.5-flash"
+MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")  # 2.5-flash is retired for new keys, see D16
 SLOT_ID_RE = re.compile(r"\bP\d-\d{8}-\d{4}\b")
 
 SYSTEM_PROMPT = """You are the appointment scheduling assistant for a small primary-care clinic, speaking with a patient by voice.

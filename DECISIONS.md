@@ -233,6 +233,26 @@ owed as soon as a `.env` is present. Nothing in the prompt has been tuned
 against real model output yet, so expect the first real run to surface prompt
 issues; those fixes are Phase 1 work, not Phase 2.
 
+## D16. Agent model is not Gemini 2.5 Flash `[OPEN, blocked on account]`
+
+First real run on 2026-10-07: the API returned 404 for gemini-2.5-flash and
+gemini-2.5-flash-lite ("no longer available to new users", recommends
+gemini-3.8-flash). Every other Flash model the key can list (3-flash-preview,
+3.1 lite, 3.5, 3.6, 3.7, 3.8, flash-latest) returned 403 "Your project has been
+denied access. Please contact support." So this key cannot run any Gemini model
+today. That is an account state, not a code defect.
+
+Code change made: the model name is read from `GEMINI_MODEL` (default
+`gemini-3.8-flash`, the vendor's recommended replacement). Nothing else in the
+loop depends on the model version.
+
+Decision needed from the human:
+(a) fix the Google project (different AI Studio project or key, billing or
+    terms acceptance) and keep the Gemini agent plus Claude judge split, or
+(b) swap the agent to Claude and lose the cross-family judge rationale in D1,
+    which would need to be re-argued in the design note.
+AI recommendation: (a), because D1 is a judgment call the reviewers will read.
+
 ## Reviewer questions, all DECIDED 2026-10-07
 
 - **Q1** Item 4 truncated. DECIDED: reconstruction confirmed, exact rules in D10.
@@ -252,3 +272,5 @@ issues; those fixes are Phase 1 work, not Phase 2.
   confirmed the two deliberate v1 omissions in D10 are seeds for Phase 2.
 - 2026-10-07: AI built Phase 1 (commits e6f6429 to 7e0ee7f), one concern each,
   18 tests. AI added D11 to D15 during the build; D11 to D13 await review.
+- 2026-10-07: First real run failed on model access (D16). AI made the model
+  name an env setting and stopped; the provider decision is the human's.
