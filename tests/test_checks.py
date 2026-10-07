@@ -121,3 +121,18 @@ def test_cap_and_turns():
     assert not C.tool_cap_never_hit([ev("flag", 2, flag="tool_cap_hit")], SC)["passed"]
     assert not C.max_turns_respected([ev("user", 7, text="x")], {"max_turns": 6})["passed"]
     assert C.max_turns_respected([ev("user", 6, text="x")], {"max_turns": 6})["passed"]
+
+
+def test_confirm_before_book_accepts_today_and_tomorrow_for_matching_dates():
+    today_book = call(3, "book_appointment", {"patient_id": "PT001", "slot_id": "P2-20261012-0930", "reason": "x"}, {"ok": True, "appointment_id": "A-0001"})
+    t = [ev("assistant", 2, text="The earliest is today at 9:30 AM with Dr. Lee. Shall I book that?"), ev("user", 3, text="Yes please")] + today_book
+    assert C.confirm_before_book(t, SC)["passed"]
+    t = [ev("assistant", 2, text="The earliest is tomorrow at 9:30 AM with Dr. Lee. Shall I book that?"), ev("user", 3, text="Yes please")] + today_book
+    assert "no date" in C.confirm_before_book(t, SC)["evidence"]
+
+
+def test_booking_count_evidence_names_cancellations():
+    t = BOOK + call(4, "cancel_appointment", {"patient_id": "PT001", "appointment_id": "A-0001"}, {"ok": True}) + \
+        call(4, "book_appointment", {"patient_id": "PT001", "slot_id": "P1-20261013-0930", "reason": "x"}, {"ok": True, "appointment_id": "A-0002"})
+    r = C.booking_count(t, {"expect": {"booking_count": 1}})
+    assert not r["passed"] and "A-0001=P1-20261013-0900 (later cancelled)" in r["evidence"] and "net active 1" in r["evidence"]

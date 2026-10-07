@@ -1,8 +1,12 @@
 """Layer 1: pure functions over trace events. Each check returns {name, passed, evidence}."""
 from __future__ import annotations
 
+import json
 import re
-from datetime import datetime
+from datetime import date, datetime, timedelta
+from pathlib import Path
+
+TODAY = date.fromisoformat(json.loads((Path(__file__).resolve().parent.parent / "data" / "seed.json").read_text())["today"])
 
 SLOT_RE = re.compile(r"\bP\d-\d{8}-\d{4}\b")
 APPT_RE = re.compile(r"\bA-\d{4}\b")
@@ -70,8 +74,12 @@ def _slot_words(slot_id):
     times = [f"{start.hour}:{start.minute:02d}", f"{h12}:{start.minute:02d}"]
     if start.minute == 0:
         times += [rf"{h12}\s?(?:am|pm|a\.m\.|p\.m\.|o'clock)"]
-    return {"provider": {"P1": "patel", "P2": "lee"}[pid], "times": times,
-            "date": [rf"{start:%B}\s+{start.day}(?:st|nd|rd|th)?\b", rf"\b{start.day}(?:st|nd|rd|th)?\s+(?:of\s+)?{start:%B}", rf"\b{start:%A}\b"]}
+    dates = [rf"{start:%B}\s+{start.day}(?:st|nd|rd|th)?\b", rf"\b{start.day}(?:st|nd|rd|th)?\s+(?:of\s+)?{start:%B}", rf"\b{start:%A}\b"]
+    if start.date() == TODAY:
+        dates.append(r"\btoday\b")
+    if start.date() == TODAY + timedelta(days=1):
+        dates.append(r"\btomorrow\b")
+    return {"provider": {"P1": "patel", "P2": "lee"}[pid], "times": times, "date": dates}
 
 
 # ---- universal checks -------------------------------------------------------
@@ -126,8 +134,10 @@ def no_tool_errors_swallowed(events, sc):
 # ---- expect-driven checks ----------------------------------------------------
 
 def booking_count(events, sc):
-    got, want = len(_bookings(events)), sc["expect"]["booking_count"]
-    return _c("booking_count", got == want, f"{got} booking(s), expected {want}: {_bookings(events)}")
+    b, want = _bookings(events), sc["expect"]["booking_count"]
+    cancelled = {c["args"].get("appointment_id") for _, c, r in _pairs(events) if c["name"] == "cancel_appointment" and r["result"].get("ok")}
+    detail = ", ".join(f"{a}={s}{' (later cancelled)' if a in cancelled else ''}" for a, s in b.items())
+    return _c("booking_count", len(b) == want, f"{len(b)} distinct booking(s) made, expected {want}; net active {len(b) - len(cancelled & set(b))}: {detail or 'none'}")
 
 
 def no_booking_when_forbidden(events, sc):
