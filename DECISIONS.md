@@ -24,7 +24,7 @@ Temperature 0 so the harness is as deterministic as the vendor allows. We will
 note in the design doc that Gemini at temperature 0 is not bit-for-bit
 deterministic and the eval reports should be read with that in mind.
 
-## D2. Module layout `[PROPOSAL]`
+## D2. Module layout `[DECIDED]`
 
 ```
 agent/
@@ -50,7 +50,7 @@ Why five modules and not one: backend enforcement, state, and the model loop
 have to be tested in isolation (tests cannot call Gemini). Why not more: the
 prompt is a string and does not deserve its own file.
 
-## D3. Conversation state contract `[PROPOSAL]`
+## D3. Conversation state contract `[DECIDED]`
 
 ```python
 @dataclass
@@ -81,14 +81,20 @@ Update rules, one function `apply(state, tool_name, args, result)`:
 `turn_count` is incremented by the loop per user turn. `flags` is appended by
 the loop. Everything else moves only inside `apply`.
 
-Tension with the brief, needs a decision: the brief says state is updated ONLY
-from tool results, but `intent`, `reason` and `preferences` are not in any tool
-result. They only exist as the arguments the model passed to a tool. Proposal:
-`apply` may read the call's arguments as well as its result, and the rule
-becomes "state changes only when a tool call executes". The model's free text
-never touches state. See open question Q2.
+Invariant (human-stated, Q2): state mutates only inside `apply()`, which runs
+only after a tool executes. `apply` may read both the call's arguments and its
+result, so intent, reason and preferences populate from get_available_slots
+arguments. If the model calls no tool in a turn, state is byte-identical before
+and after that turn. There is a test for exactly that.
 
-## D4. Tool contracts `[PROPOSAL]` (shapes from the brief are `[DIRECTIVE]`)
+Why (human reasoning): "no tool, no state change" is what makes the state
+auditable, and it collapses to a one-line test.
+
+The state block serialised into every prompt also carries
+`today: 2026-10-12 (Monday)` so relative dates like "next Tuesday" resolve
+deterministically (Q5).
+
+## D4. Tool contracts `[DECIDED]` (shapes from the brief are `[DIRECTIVE]`)
 
 All dates are ISO `YYYY-MM-DD`, all times ISO local `YYYY-MM-DDTHH:MM`.
 
@@ -109,7 +115,7 @@ book_appointment(patient_id: str, slot_id: str, reason: str)
    | {ok: false, error: "not_verified" | "slot_taken" | "unknown_slot" | "slot_not_offered"}
   Enforced in backend: patient_id must be verified this session; slot must be free.
   Idempotent on (patient_id, slot_id): same pair returns the same appointment_id.
-  "slot_not_offered" is enforced in tools.dispatch using state.offered_slots. See Q3.
+  "slot_not_offered" is enforced in tools.dispatch using state.offered_slots (Q3).
 
 cancel_appointment(patient_id: str, appointment_id: str)
   -> {ok: true} | {ok: false, error: "not_verified" | "not_found"}
@@ -123,14 +129,14 @@ Slot id format `P1-20261012-0900` (provider, date, time). Chosen so the loop can
 find slot ids in model text with one regex and compare against offered_slots.
 Appointment ids `A-0001`, tickets `T-0001`, sequential per backend instance.
 
-## D5. Deterministic backend `[PROPOSAL]`
+## D5. Deterministic backend `[DECIDED]`
 
 Slots are generated from `data/seed.json`: anchor Monday, 10 business days,
 clinic hours, 30-minute grid, and a fixed list of pre-taken slot ids so
 `slot_taken` can happen in scenarios. No randomness anywhere, so the same seed
 file always gives the same slots. Each chat or eval run gets a fresh backend.
 
-## D6. Agent loop and trace `[PROPOSAL]`
+## D6. Agent loop and trace `[DECIDED]`
 
 Per user turn: append user text, call Gemini with tools, execute every function
 call it returns (in order), `apply` each result, append results, call again.
@@ -146,11 +152,19 @@ Trace: one JSONL line per event in `runs/<timestamp>.jsonl`. Event types:
 `user`, `tool_call`, `tool_result`, `assistant`, `flag`, `state` (snapshot after
 each turn). The Phase 2 scorer reads only this file.
 
-Unoffered slot detection: after each assistant text, regex for slot ids; any id
-not in offered_slots appends `unoffered_slot_mentioned:<id>` to flags and
-writes a `flag` event.
+Unoffered slot handling is two separate things, both in the trace (Q3):
 
-## D7. Scripted mode `[PROPOSAL]`
+1. Control: dispatch rejects book_appointment on a slot_id not in
+   offered_slots with error `slot_not_offered`. The backend never sees it.
+2. Measurement: every assistant message is scanned for slot-id patterns; any id
+   not in offered_slots is logged as `unoffered_mention:<id>` in flags and as a
+   `flag` event. Text-level, scored in Phase 2.
+
+Why both (human reasoning): a control is the backend refusing, a measurement is
+the trace recording the attempt. The eval harness scores attempts, not just
+outcomes, so one without the other loses information.
+
+## D7. Scripted mode `[DECIDED]`
 
 `scenarios/smoke.json` is `{"name": "...", "turns": ["patient utterance", ...]}`.
 `--script` replays the turns in order and prints the transcript. Phase 2 adds
@@ -162,37 +176,39 @@ No read-back confirmation before booking. No retry when book returns
 slot_taken. The system prompt does not mention either. The eval loop in
 Phase 2 is expected to surface these and the fix is the demo of the loop.
 
-## D9. Dependencies `[PROPOSAL]`
+## D9. Dependencies `[DECIDED]`
 
 `google-genai`, `anthropic` (Phase 2), `pytest`. `.env` is read by a six-line
 parser in `agent/chat.py` instead of adding python-dotenv. uv for env management,
 `pyproject.toml` only.
 
-## D10. System prompt scope `[PROPOSAL]` (reconstructs truncated brief item 4)
+## D10. System prompt scope `[DECIDED]` (reconstructs truncated brief item 4)
 
-Item 4 of the Phase 1 scope arrived cut off. Reconstructed intent, pending
-confirmation (Q1): verify identity before booking or cancelling; if the patient
-describes an emergency, call escalate_to_human with urgency high and tell them
-to call emergency services; stay in scope (no medical advice, no other
-patients); only offer slots the tool returned, by slot id; short turns suited to
-voice.
+Item 4 of the Phase 1 scope arrived cut off. Human confirmed the v1 rules
+exactly (Q1): identify and verify before any appointment data; never give
+medical advice; emergency symptoms (chest pain, trouble breathing, stroke signs,
+suicidal ideation) mean stop scheduling, tell them to call emergency services,
+and call escalate_to_human with urgency high; stay in scope; only offer slots
+returned by the tool.
 
-## Open questions for the reviewer
+v1 deliberately omits read-back confirmation before booking and
+retry-on-slot_taken. Both are intentional seeds for the improvement loop: the
+Phase 2 harness should find them, and fixing them is the demonstration.
 
-- **Q1** Item 4 of the brief is truncated. Is D10 the intended content?
-- **Q2** May `apply` read tool call arguments for intent, reason, preferences
-  (D3)? If no, those three fields stay None in v1.
-- **Q3** Booking a slot that was never offered: block at dispatch with
-  `slot_not_offered` and flag (proposal), or let it reach the backend and only
-  flag? The brief says "flags it" for mentions but "cannot book" for the test.
-- **Q4** Cap get_available_slots at 6 results and ignore `reason` for
-  filtering (D4, A3)?
-- **Q5** Fixed anchor date in the seed (A1) rather than today-relative?
-- **Q6** Idempotency key is (patient_id, slot_id); a different `reason` on the
-  same pair is ignored and the same appointment_id returns. Agree?
-- **Q7** Cancel frees the slot for others (A5). Agree?
+## Reviewer questions, all DECIDED 2026-10-07
+
+- **Q1** Item 4 truncated. DECIDED: reconstruction confirmed, exact rules in D10.
+- **Q2** DECIDED: yes, with the invariant stated in D3 and a no-tool-no-change test.
+- **Q3** DECIDED: both. Dispatch control plus text-level measurement, see D6.
+- **Q4** DECIDED: default accepted, 6 results, reason does not filter.
+- **Q5** DECIDED: fixed anchor 2026-10-12, and today is serialised into the state block.
+- **Q6** DECIDED: default accepted, key is (patient_id, slot_id).
+- **Q7** DECIDED: default accepted, cancel frees the slot.
 
 ## AI versus human judgment
 
-- 2026-10-07: AI drafted D2 to D10 and all questions from the brief. No code
-  written yet. Human review pending.
+- 2026-10-07: AI drafted D2 to D10 and Q1 to Q7 from the brief. No code written.
+- 2026-10-07: Human accepted defaults on Q2, Q3, Q4, Q6, Q7 and sharpened Q1,
+  Q2, Q3, Q5. Human added the two reasons recorded in D3 and D6 (auditable
+  state via "no tool, no state change"; control versus measurement). Human
+  confirmed the two deliberate v1 omissions in D10 are seeds for Phase 2.
