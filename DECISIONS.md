@@ -246,12 +246,29 @@ Code change made: the model name is read from `GEMINI_MODEL` (default
 `gemini-3.8-flash`, the vendor's recommended replacement). Nothing else in the
 loop depends on the model version.
 
+Update, second key (2026-10-07 12:42): authentication works. gemini-3.8-flash,
+3.5-flash and flash-latest answer a bare "Say ok". But every request that
+carries our system instruction, with or without tools, fails with 503 "high
+demand" or 504 DEADLINE_EXCEEDED, including a two-line prompt. Thinking level
+MINIMAL made no difference. After about 20 calls the key returned 429 with the
+quota named explicitly: `generate_content_free_tier_requests`, limit 20 per day
+per model, retry in 16 hours. So the project is on the free tier, which is
+throttled to 20 requests per day per model and shed under load. One four-turn
+smoke scenario is roughly 8 to 10 requests; the Phase 2 harness needs hundreds.
+
 Decision needed from the human:
-(a) fix the Google project (different AI Studio project or key, billing or
-    terms acceptance) and keep the Gemini agent plus Claude judge split, or
+(a) enable billing (pay-as-you-go) on the AI Studio project, which lifts both
+    the daily cap and the load shedding, and keep the Gemini agent plus Claude
+    judge split, or
 (b) swap the agent to Claude and lose the cross-family judge rationale in D1,
     which would need to be re-argued in the design note.
-AI recommendation: (a), because D1 is a judgment call the reviewers will read.
+AI recommendation: (a), because D1 is a judgment call the reviewers will read
+and the code change is nil. If (a) is not possible, (b) is a one-function change
+behind the D11 seam.
+
+Observed latency note for the design doc: even successful free-tier calls took
+5 to 34 seconds, so the live chat demo and the eval loop should be timed on the
+paid tier, not on these numbers.
 
 ## Reviewer questions, all DECIDED 2026-10-07
 
@@ -274,3 +291,6 @@ AI recommendation: (a), because D1 is a judgment call the reviewers will read.
   18 tests. AI added D11 to D15 during the build; D11 to D13 await review.
 - 2026-10-07: First real run failed on model access (D16). AI made the model
   name an env setting and stopped; the provider decision is the human's.
+- 2026-10-07: Second key authenticates but is free tier (20 requests per day per
+  model, load shed with our prompt). AI diagnosed it with 30 probe requests,
+  recorded D16, and stopped calling the API to preserve quota.
