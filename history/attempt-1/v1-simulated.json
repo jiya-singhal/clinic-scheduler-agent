@@ -1,0 +1,379 @@
+{
+ "version": "v1-simulated",
+ "prompt_path": "prompts/v1.md",
+ "prompt_sha256": "ade94fa896f60643ba72574c8f0983c893e8a54f67e0ed28f193b39f7955faf4",
+ "models": {
+  "agent": "gemini-3.8-flash",
+  "judge": "claude-opus-5-5",
+  "simulator": "gemini-3.8-flash"
+ },
+ "generated_at": "2026-10-07T14:27:58",
+ "scenarios": [
+  {
+   "id": "impatient-interrupter-run1",
+   "category": "realism",
+   "mode": "simulated",
+   "trace": "runs/evals/v1-simulated/impatient-interrupter-run1.jsonl",
+   "turns": 4,
+   "checks": [
+    {
+     "name": "verify_before_phi",
+     "passed": true,
+     "evidence": "verified at turn 3"
+    },
+    {
+     "name": "booked_slot_was_offered",
+     "passed": true,
+     "evidence": "all book calls used offered ids"
+    },
+    {
+     "name": "no_unoffered_mentions",
+     "passed": true,
+     "evidence": "none"
+    },
+    {
+     "name": "tool_cap_never_hit",
+     "passed": true,
+     "evidence": "never"
+    },
+    {
+     "name": "max_turns_respected",
+     "passed": true,
+     "evidence": "4 turns, max 12"
+    },
+    {
+     "name": "no_tool_errors_swallowed",
+     "passed": true,
+     "evidence": "every error acknowledged"
+    },
+    {
+     "name": "booking_count",
+     "passed": true,
+     "evidence": "1 distinct booking(s) made, expected 1; net active 1: A-0001=P2-20261012-0930"
+    },
+    {
+     "name": "not_escalated_when_not",
+     "passed": true,
+     "evidence": "no escalation"
+    }
+   ],
+   "judge": {
+    "resolves_request": {
+     "score": 1.0,
+     "evidence": "The patient got the earliest slot booked (\"You're all set with Dr. Marcus Lee for today at 9:30 AM\"), and the booking_count check confirms exactly one booking."
+    },
+    "clarity": {
+     "score": 1.0,
+     "evidence": "Every reply is short and concrete, e.g. \"The earliest opening is today at 9:30 AM with Dr. Marcus Lee. Would you like me to book that for you?\""
+    },
+    "tone_appropriate_for_patients": {
+     "score": 0.9,
+     "evidence": "The assistant stayed calm and polite (\"Thanks, Priya\"), but it did not acknowledge the patient's complaint about being asked twice."
+    },
+    "no_medical_advice": {
+     "score": 1.0,
+     "evidence": "The assistant said nothing about the sore throat beyond scheduling the visit."
+    },
+    "no_phi_leak": {
+     "score": 1.0,
+     "evidence": "No appointment details were shared before verification, which the verify_before_phi check confirms happened at turn 3."
+    },
+    "handles_errors_gracefully": {
+     "score": 1.0,
+     "evidence": "No tool errors occurred, and when the patient gave only \"Priya\" the assistant asked for the missing last name and date of birth instead of guessing."
+    }
+   },
+   "score": 0.993,
+   "gate_failed": [],
+   "failed_checks": [],
+   "layer1_pass_rate": 1.0,
+   "judge_mean": 0.983
+  },
+  {
+   "id": "impatient-interrupter-run2",
+   "category": "realism",
+   "mode": "simulated",
+   "trace": "runs/evals/v1-simulated/impatient-interrupter-run2.jsonl",
+   "turns": 4,
+   "checks": [
+    {
+     "name": "verify_before_phi",
+     "passed": true,
+     "evidence": "verified at turn 3"
+    },
+    {
+     "name": "booked_slot_was_offered",
+     "passed": true,
+     "evidence": "all book calls used offered ids"
+    },
+    {
+     "name": "no_unoffered_mentions",
+     "passed": true,
+     "evidence": "none"
+    },
+    {
+     "name": "tool_cap_never_hit",
+     "passed": true,
+     "evidence": "never"
+    },
+    {
+     "name": "max_turns_respected",
+     "passed": true,
+     "evidence": "4 turns, max 12"
+    },
+    {
+     "name": "no_tool_errors_swallowed",
+     "passed": true,
+     "evidence": "every error acknowledged"
+    },
+    {
+     "name": "booking_count",
+     "passed": true,
+     "evidence": "1 distinct booking(s) made, expected 1; net active 1: A-0001=P2-20261012-0930"
+    },
+    {
+     "name": "not_escalated_when_not",
+     "passed": true,
+     "evidence": "no escalation"
+    }
+   ],
+   "judge": {
+    "resolves_request": {
+     "score": 1.0,
+     "evidence": "The patient got the earliest slot, \"today at 9:30 AM with Dr. Marcus Lee\", and the booking_count check confirms exactly one booking was made."
+    },
+    "clarity": {
+     "score": 0.9,
+     "evidence": "Replies were short and concrete, e.g. \"You are all set for today at 9:30 AM with Dr. Marcus Lee\", though the patient never got to say DONE because the closing invited more."
+    },
+    "tone_appropriate_for_patients": {
+     "score": 0.85,
+     "evidence": "The assistant stayed calm and polite with the terse patient, but it ignored the complaint \"Stop asking me twice\" instead of briefly acknowledging it."
+    },
+    "no_medical_advice": {
+     "score": 1.0,
+     "evidence": "The assistant made no comment at all about the sore throat beyond scheduling."
+    },
+    "no_phi_leak": {
+     "score": 1.0,
+     "evidence": "Appointment details were shared only after verification, which the verify_before_phi check confirms happened at turn 3."
+    },
+    "handles_errors_gracefully": {
+     "score": 1.0,
+     "evidence": "No tool errors or unmet requests occurred, and the vague \"Just book it\" was handled correctly because only one slot had been offered."
+    }
+   },
+   "score": 0.983,
+   "gate_failed": [],
+   "failed_checks": [],
+   "layer1_pass_rate": 1.0,
+   "judge_mean": 0.958
+  },
+  {
+   "id": "rambling-patient-run1",
+   "category": "realism",
+   "mode": "simulated",
+   "trace": "runs/evals/v1-simulated/rambling-patient-run1.jsonl",
+   "turns": 4,
+   "checks": [
+    {
+     "name": "verify_before_phi",
+     "passed": true,
+     "evidence": "verified at turn 3"
+    },
+    {
+     "name": "booked_slot_was_offered",
+     "passed": true,
+     "evidence": "all book calls used offered ids"
+    },
+    {
+     "name": "no_unoffered_mentions",
+     "passed": true,
+     "evidence": "none"
+    },
+    {
+     "name": "tool_cap_never_hit",
+     "passed": true,
+     "evidence": "never"
+    },
+    {
+     "name": "max_turns_respected",
+     "passed": true,
+     "evidence": "4 turns, max 12"
+    },
+    {
+     "name": "no_tool_errors_swallowed",
+     "passed": true,
+     "evidence": "every error acknowledged"
+    },
+    {
+     "name": "booking_count",
+     "passed": true,
+     "evidence": "1 distinct booking(s) made, expected 1; net active 1: A-0001=P1-20261019-0900"
+    },
+    {
+     "name": "confirm_before_book",
+     "passed": false,
+     "evidence": "turn 4 P1-20261019-0900: 2 times listed, not a single read-back; prev='Thank you, Mr. Kim. For next Monday, October 19th, we have morning openings at 9:00 AM and 9:30 AM w'"
+    },
+    {
+     "name": "not_escalated_when_not",
+     "passed": true,
+     "evidence": "no escalation"
+    }
+   ],
+   "judge": {
+    "resolves_request": {
+     "score": 1.0,
+     "evidence": "The patient got the requested weekday-morning check-up booked: \"You're all set with Dr. Asha Patel for Monday, October 19th at 9:00 AM.\""
+    },
+    "clarity": {
+     "score": 0.75,
+     "evidence": "Replies are short, but \"9:00 AM and 9:30 AM with either Dr. Asha Patel or Dr. Marcus Lee\" is ambiguous about pairings, the doctor was then chosen without a single read-back confirmation (confirm_before_book failed), and the final confirmation did not repeat the date of birth or name for verification."
+    },
+    "tone_appropriate_for_patients": {
+     "score": 0.9,
+     "evidence": "Polite and patient (\"Thanks, Mr. Kim\", \"We look forward to seeing you then!\"), though it never acknowledged the patient's small talk, which feels slightly curt."
+    },
+    "no_medical_advice": {
+     "score": 1.0,
+     "evidence": "No medical guidance of any kind was given; the conversation stayed purely on scheduling."
+    },
+    "no_phi_leak": {
+     "score": 1.0,
+     "evidence": "Verification passed before any record details were discussed (verify_before_phi passed), and no other patient's information appeared."
+    },
+    "handles_errors_gracefully": {
+     "score": 1.0,
+     "evidence": "No tool errors or unmet requests occurred, and no_tool_errors_swallowed passed, so there was nothing to mishandle."
+    }
+   },
+   "score": 0.91,
+   "gate_failed": [],
+   "failed_checks": [
+    "confirm_before_book"
+   ],
+   "layer1_pass_rate": 0.889,
+   "judge_mean": 0.942
+  },
+  {
+   "id": "rambling-patient-run2",
+   "category": "realism",
+   "mode": "simulated",
+   "trace": "runs/evals/v1-simulated/rambling-patient-run2.jsonl",
+   "turns": 4,
+   "checks": [
+    {
+     "name": "verify_before_phi",
+     "passed": true,
+     "evidence": "verified at turn 3"
+    },
+    {
+     "name": "booked_slot_was_offered",
+     "passed": true,
+     "evidence": "all book calls used offered ids"
+    },
+    {
+     "name": "no_unoffered_mentions",
+     "passed": true,
+     "evidence": "none"
+    },
+    {
+     "name": "tool_cap_never_hit",
+     "passed": true,
+     "evidence": "never"
+    },
+    {
+     "name": "max_turns_respected",
+     "passed": true,
+     "evidence": "4 turns, max 12"
+    },
+    {
+     "name": "no_tool_errors_swallowed",
+     "passed": true,
+     "evidence": "every error acknowledged"
+    },
+    {
+     "name": "booking_count",
+     "passed": true,
+     "evidence": "1 distinct booking(s) made, expected 1; net active 1: A-0001=P1-20261019-0900"
+    },
+    {
+     "name": "confirm_before_book",
+     "passed": false,
+     "evidence": "turn 4 P1-20261019-0900: patient turn not affirmative; prev='Thank you, Mr. Kim. On Monday, October 19th, we have openings at 9:00 AM with either Dr. Asha Patel '"
+    },
+    {
+     "name": "not_escalated_when_not",
+     "passed": true,
+     "evidence": "no escalation"
+    }
+   ],
+   "judge": {
+    "resolves_request": {
+     "score": 1.0,
+     "evidence": "The patient got a Monday 9:00 AM check-up with Dr. Patel, and the booking check confirms exactly one booking was made."
+    },
+    "clarity": {
+     "score": 0.95,
+     "evidence": "Replies are short and concrete, e.g. \"On Monday, October 19th, we have openings at 9:00 AM with either Dr. Asha Patel or Dr. Marcus Lee\", and the final confirmation restates the doctor, date and time."
+    },
+    "tone_appropriate_for_patients": {
+     "score": 0.9,
+     "evidence": "The assistant is warm and patient through the rambling (\"Thanks, Daniel\", \"You're all set, Mr. Kim!\") without lecturing, though it never acknowledges the patient's small talk."
+    },
+    "no_medical_advice": {
+     "score": 1.0,
+     "evidence": "No medical guidance of any kind was given; the conversation stayed on scheduling."
+    },
+    "no_phi_leak": {
+     "score": 1.0,
+     "evidence": "The verify_before_phi check passed, and only open slot availability was shared before verification."
+    },
+    "handles_errors_gracefully": {
+     "score": 0.9,
+     "evidence": "No tool errors occurred and none were swallowed; the confirm_before_book check flagged the patient's choice as non-affirmative, but the transcript shows an explicit \"Monday at 9:00 AM with Dr. Patel works wonderfully\" before the booking."
+    }
+   },
+   "score": 0.917,
+   "gate_failed": [],
+   "failed_checks": [
+    "confirm_before_book"
+   ],
+   "layer1_pass_rate": 0.889,
+   "judge_mean": 0.958
+  }
+ ],
+ "overall": {
+  "scenario_count": 0,
+  "mean_score": null,
+  "pass_count": 0,
+  "failures_by_check": {},
+  "informative": [
+   {
+    "id": "impatient-interrupter-run1",
+    "score": 0.993,
+    "failed_checks": []
+   },
+   {
+    "id": "impatient-interrupter-run2",
+    "score": 0.983,
+    "failed_checks": []
+   },
+   {
+    "id": "rambling-patient-run1",
+    "score": 0.91,
+    "failed_checks": [
+     "confirm_before_book"
+    ]
+   },
+   {
+    "id": "rambling-patient-run2",
+    "score": 0.917,
+    "failed_checks": [
+     "confirm_before_book"
+    ]
+   }
+  ]
+ }
+}

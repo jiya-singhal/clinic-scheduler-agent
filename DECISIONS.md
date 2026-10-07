@@ -577,3 +577,35 @@ the live prompt, and the gate verdict would be a second human checkpoint.
 
 On a rejected version the loop stops. Retrying with a different rule, or
 targeting more than one check per iteration, is future work.
+
+## D37. First loop attempt rejected v2, and the fault was the harness `[DECIDED, by evidence]`
+
+The improver proposed exactly the intended rule for confirm_before_book: read
+back the single chosen slot and wait for a yes before calling the booking tool.
+The gate rejected v2: mean 0.933 -> 0.904, booking_count newly failing on five
+scenarios. Reading the traces, the agent did what the rule says. It read the
+slot back and asked "Is that right?" after the script's last line, and a fixed
+script has no next line, so no booking ever happened. The rule was right and the
+scripted harness could not answer it. Record kept in history/attempt-1/.
+
+Fix, the smallest one: affirm on demand. In scripted mode, once the script is
+exhausted, if no booking exists yet and the agent's reply ends with a question
+that names a clock time, the runner answers "Yes, that's right." and lets the
+agent take one more turn, at most twice. The trace records it as an
+`auto_affirm` event. v1 is unaffected: when the script ends it has either
+already booked (no trigger) or is refusing without naming times (no trigger).
+The general fix is a simulated patient for every scenario, which is future work
+and should be in the design note; it also would have cost the determinism the
+scripted scenarios give the gate.
+
+A second harness defect surfaced by the same run: `no_tool_errors_swallowed`
+rejected "I still wasn't able to locate your chart" as an acknowledgement of a
+failed verification. The keyword set now includes locate, chart, wasn't able,
+not able.
+
+Both fixes change what the baseline measures, so v1 is re-run fresh rather than
+reused, and the archived attempt-1 numbers are not comparable with the new run.
+
+Design-note point: the loop found two bugs in the harness before it improved
+the agent. That is the expected shape of the first iterations of any eval loop,
+and it is why the gate reads the trace rather than trusting the score.

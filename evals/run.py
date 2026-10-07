@@ -13,7 +13,7 @@ from agent.backend import Clinic
 from agent.chat import load_env
 from agent.loop import MODEL as AGENT_MODEL, Agent, gemini_model
 from evals import judge as J
-from evals.checks import run_checks
+from evals.checks import TIME_RE, run_checks
 from evals.score import aggregate, score_scenario
 from evals.simulate import DONE, gemini_patient
 from evals import versions as V
@@ -21,6 +21,8 @@ from evals.gate import gate
 from evals.improver import propose
 
 SCENARIOS_DIR = Path("scenarios")
+AUTO_AFFIRM = "Yes, that's right."
+MAX_AUTO_AFFIRM = 2
 
 
 def load_scenarios(only: str | None = None) -> list[dict]:
@@ -64,8 +66,17 @@ def run_scenario(sc: dict, *, prompt_text: str, trace_path: Path, model_fn, pati
     ref.append(agent)
     max_turns = sc.get("max_turns", 12)
     if sc["mode"] == "scripted":
+        reply = ""
         for t in sc["turns"][:max_turns]:
-            agent.turn(t)
+            reply = agent.turn(t)
+        # Affirm on demand (D37): a fixed script cannot answer a confirmation question the agent asks after the
+        # script's last line. If no booking exists yet and the agent just read back a slot and asked, say yes, at most twice.
+        affirmations = 0
+        while (affirmations < MAX_AUTO_AFFIRM and agent.state.turn_count < max_turns and agent.state.booked_appointment_id is None
+               and reply.rstrip().endswith("?") and TIME_RE.search(reply)):
+            affirmations += 1
+            agent.log("auto_affirm", text=AUTO_AFFIRM)
+            reply = agent.turn(AUTO_AFFIRM)
     else:
         patient = patient_fn(sc["brief"])
         line = patient(None)

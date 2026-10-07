@@ -17,7 +17,7 @@ WEEKDAYS = "monday|tuesday|wednesday|thursday|friday|saturday|sunday"
 ERROR_ACK = {  # error class -> words an honest acknowledgement would contain
     "slot_taken": r"taken|no longer|unavailable|not available|someone else|just been booked|gone",
     "not_verified": r"verify|verification|identity|date of birth|match|record",
-    "verify_failed": r"verify|match|record|find|date of birth|try again|unable|couldn't|could not",
+    "verify_failed": r"verify|match|record|chart|find|locate|date of birth|try again|unable|not able|wasn't able|couldn't|could not",
     "not_found": r"find|locate|no appointment|don't see|do not see|couldn't|could not|unable|no record",
     "slot_not_offered": r"not available|not one of|couldn't|could not|unable|let me|check|offer",
     "unknown_slot": r"not available|couldn't|could not|unable|let me|check",

@@ -104,6 +104,7 @@ def test_no_tool_errors_swallowed():
     vf = call(1, "verify_patient", {"full_name": "x", "dob": "y"}, {"verified": False, "patient_id": None})
     assert not C.no_tool_errors_swallowed(vf + [ev("assistant", 1, text="Great, what day suits you?")], SC)["passed"]
     assert C.no_tool_errors_swallowed(vf + [ev("assistant", 1, text="I couldn't find a record matching that. Could you repeat your date of birth?")], SC)["passed"]
+    assert C.no_tool_errors_swallowed(vf + [ev("assistant", 1, text="I still wasn't able to locate your chart with that information.")], SC)["passed"]
 
 
 def test_backend_checks_and_offered_within():

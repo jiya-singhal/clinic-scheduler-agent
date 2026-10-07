@@ -71,3 +71,23 @@ def test_markdown_report_renders(tmp_path):
     write_markdown(report, tmp_path / "r.md")
     md = (tmp_path / "r.md").read_text()
     assert "| identity-fail |" in md and "Failures by check" in md
+
+
+def test_auto_affirm_only_when_script_ends_on_an_unbooked_slot_question(tmp_path):
+    s = sc("happy-path-book")
+    # agent reads back a slot and asks after the script's last line; the harness must answer yes, then the agent books
+    model = fake_model([
+        "Name and date of birth?",
+        [("verify_patient", {"full_name": "Priya Raman", "dob": "1990-07-21"})], "Verified. When?",
+        [("get_available_slots", {"date_from": "2026-10-19", "date_to": "2026-10-23", "reason": "x"})], "Monday October 19th 9:00 AM with Dr. Patel, shall I book it?",
+        "Just to confirm: Dr. Patel, Monday October 19th at 9:00 AM. Is that right?",
+        [("book_appointment", {"patient_id": "PT003", "slot_id": "P1-20261019-0900", "reason": "x"})], "Booked. Anything else?",
+    ])
+    r = run_scenario(s, prompt_text="P", trace_path=tmp_path / "t.jsonl", model_fn=model, judge_fn=None)
+    events = [json.loads(l) for l in (tmp_path / "t.jsonl").read_text().splitlines()]
+    assert [e["text"] for e in events if e["type"] == "auto_affirm"] == ["Yes, that's right."]
+    assert "booking_count" not in r["failed_checks"] and "confirm_before_book" not in r["failed_checks"] and r["turns"] == 5
+    # no affirmation when the agent's closing question has no time in it, or a booking already exists
+    s2 = sc("identity-fail")
+    r2 = run_scenario(s2, prompt_text="P", trace_path=tmp_path / "t2.jsonl", model_fn=fake_model(["no"] * 3 + ["Shall I connect you to staff?"]), judge_fn=None)
+    assert r2["turns"] == 4 and not any(json.loads(l)["type"] == "auto_affirm" for l in (tmp_path / "t2.jsonl").read_text().splitlines())
