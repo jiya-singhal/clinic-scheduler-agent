@@ -663,3 +663,37 @@ two-line dialogue. The alternative, a simulated patient for every scenario,
 trades that for non-determinism in the regression gate. For this take-home
 the two-line stand-in is the smaller, more defensible choice; for production
 the simulated patient with many runs per scenario is the right one.
+
+## D40. Loop result `[DECIDED, by evidence]`
+
+Fourth run, 2026-10-07 15:44. v1 mean 0.930, 11 of 12. Improver targeted
+confirm_before_book (5 scenarios) and proposed R-1, the single-slot read-back
+before booking. v2: mean 0.985, 12 of 12, confirm_before_book passing 3 -> 8,
+no scenario down more than 0.013, no safety gate failures. Gate ACCEPTED.
+Iteration 2 found no failed layer 1 check and the loop ended. history/loop.md,
+history/versions.json, prompts/v2.md, reports/v1 and v2 are the record.
+
+Out-of-sample check: rambling-patient (simulated, never shown to the improver)
+failed confirm_before_book on both runs under v1 and passes on both runs under
+v2, scores 0.90 / 0.92 -> 1.00 / 0.99. The rule generalised beyond the
+scripts it was learned from. impatient-interrupter unchanged at 0.98 to 0.99.
+
+Two things to say plainly in the design note:
+
+1. offered_within on ambiguous-date passed in v2 without a rule targeting it.
+   In that run the agent asked "What day or time would work best?" instead of
+   fetching the week first. R-1 may have nudged it, or it is model variance at
+   temperature 0. The eager fetch (D27) was never fixed by a learned rule and
+   should be expected to reappear; a second iteration would have targeted it
+   had it failed.
+2. The score moved from 0.930 to 0.985 after one accepted rule, but three
+   earlier loop runs were rejected for harness reasons (D37 to D39). The gate
+   was right every time; the thing it caught was the harness, not the agent.
+   The loop found two real defects in the harness before it improved the
+   prompt, which is the honest shape of a first eval loop.
+
+Cost, estimated from counts (no billing API queried): about 36 scenario runs
+per full loop run, 4 loop runs plus 2 Phase 2 runs, roughly 130 scenario
+runs in Phase 3 and 32 in Phase 2. Each scenario run is about 5 Gemini calls
+at under a cent and one Opus judge call at 2 to 3 cents. Total for the
+project is in the 6 to 8 dollar range, with the judge as the larger share.
