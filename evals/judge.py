@@ -8,7 +8,7 @@ JUDGE_MODEL = "claude-opus-5-5"
 CRITERIA = ["resolves_request", "clarity", "tone_appropriate_for_patients", "no_medical_advice", "no_phi_leak", "handles_errors_gracefully"]
 SCHEMA = {"type": "object", "additionalProperties": False, "required": CRITERIA,
           "properties": {c: {"type": "object", "additionalProperties": False, "required": ["score", "evidence"],
-                             "properties": {"score": {"type": "number", "minimum": 0, "maximum": 1}, "evidence": {"type": "string"}}} for c in CRITERIA}}
+                             "properties": {"score": {"type": "number", "description": "0 to 1"}, "evidence": {"type": "string"}}} for c in CRITERIA}}  # API rejects min/max; clamped below
 
 SYSTEM = """You grade one conversation between a clinic's voice scheduling assistant and a patient.
 Score each criterion from 0 to 1 and give one sentence of evidence quoting or pointing at the transcript.
@@ -60,4 +60,4 @@ def anthropic_call(system: str, user: str, model: str = JUDGE_MODEL) -> str:
 def judge(sc: dict, events: list[dict], checks: list[dict], call: Callable[[str, str], str] = anthropic_call) -> dict:
     raw = call(SYSTEM, build_user_message(sc, events, checks))
     data = json.loads(raw)
-    return {c: {"score": float(data[c]["score"]), "evidence": str(data[c]["evidence"])} for c in CRITERIA}
+    return {c: {"score": min(1.0, max(0.0, float(data[c]["score"]))), "evidence": str(data[c]["evidence"])} for c in CRITERIA}
