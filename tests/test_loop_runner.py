@@ -66,3 +66,15 @@ def test_human_decline_stops_before_applying(tmp_path):
     propose_fn = lambda t, r, o: {"rule_id": "x", "target_check": "confirm_before_book", "source_scenarios": ["a"], "rule_text": "Rule.", "rationale": "r", "risk": "k"}
     s = run_loop(v1, 3, evaluate_fn=lambda p, o, m, r: rep, propose_fn=propose_fn, auto_apply=False, history_dir=hist, reports_dir=reps, ask=lambda _: "n")
     assert s["iterations"] == [] and not (tmp_path / "prompts" / "v2.md").exists() and "declined by human" in (hist / "loop.md").read_text()
+
+
+def test_evaluate_does_not_reuse_report_whose_traces_are_missing(tmp_path, monkeypatch):
+    from evals.run import evaluate
+    out = tmp_path / "v1.json"
+    prompt = tmp_path / "v1.md"; prompt.write_text("P\n")
+    import hashlib, json as j
+    out.write_text(j.dumps({"prompt_sha256": hashlib.sha256(b"P").hexdigest(), "scenarios": [{"mode": "scripted", "trace": str(tmp_path / "missing.jsonl")}]}))
+    calls = []
+    monkeypatch.setattr("evals.run.load_scenarios", lambda only=None: (calls.append(1) or []))
+    report = evaluate(prompt, out, client=None, judge_fn=None, modes=("scripted",), reuse=True)
+    assert calls == [1] and report["scenarios"] == []  # fell through to a real (here empty) run instead of reusing

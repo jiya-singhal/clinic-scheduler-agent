@@ -149,10 +149,12 @@ def evaluate(prompt_path: Path, out_path: Path, *, client, judge_fn, modes=("scr
     version = out_path.stem
     if reuse and out_path.exists():
         cached = json.loads(out_path.read_text())
-        if cached["prompt_sha256"] == hashlib.sha256(prompt_text.encode()).hexdigest() and all(
+        traces_present = all(Path(r["trace"]).exists() for r in cached["scenarios"])  # runs/ is gitignored; a clone has none
+        if cached["prompt_sha256"] == hashlib.sha256(prompt_text.encode()).hexdigest() and traces_present and all(
                 any(r["mode"] == m for r in cached["scenarios"]) or m == "simulated" for m in modes):
-            print(f"reusing {out_path} (same prompt hash)")
+            print(f"reusing {out_path} (same prompt hash, traces present)")
             return cached
+        print(f"not reusing {out_path}: " + ("prompt changed" if cached["prompt_sha256"] != hashlib.sha256(prompt_text.encode()).hexdigest() else "traces missing"))
     results = []
     for sc in load_scenarios(only):
         if sc["mode"] not in modes:
