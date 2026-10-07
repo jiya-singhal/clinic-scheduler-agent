@@ -233,7 +233,7 @@ owed as soon as a `.env` is present. Nothing in the prompt has been tuned
 against real model output yet, so expect the first real run to surface prompt
 issues; those fixes are Phase 1 work, not Phase 2.
 
-## D16. Agent model is not Gemini 2.5 Flash `[OPEN, blocked on account]`
+## D16. Agent model is Gemini 3.8 Flash, not 2.5 Flash `[DECIDED]`
 
 First real run on 2026-10-07: the API returned 404 for gemini-2.5-flash and
 gemini-2.5-flash-lite ("no longer available to new users", recommends
@@ -270,6 +270,20 @@ Observed latency note for the design doc: even successful free-tier calls took
 5 to 34 seconds, so the live chat demo and the eval loop should be timed on the
 paid tier, not on these numbers.
 
+Resolution (2026-10-07 13:19): a third key, created directly in AI Studio
+(standard `AIza...` format; the earlier keys were `AQ....` credentials from a
+different Google project type), works on gemini-3.8-flash with billing enabled.
+The smoke scenario ran end to end in 22.6 seconds for four turns, three tool
+calls, zero flags, final state booked A-0001. Decision (a) stands: Gemini agent,
+Claude judge, D1 unchanged. The agent model is gemini-3.8-flash because 2.5
+Flash is retired for new keys; the brief's "Gemini 2.5 Flash" is read as "the
+current Gemini Flash". Human considered and rejected a Claude-only build once
+the key worked.
+
+First real transcript confirmed the v1 seeds in D10 are live: on "the first one
+is fine, please book it" the agent booked immediately with no read-back of
+provider, date and time. Phase 2 should catch this.
+
 ## Reviewer questions, all DECIDED 2026-10-07
 
 - **Q1** Item 4 truncated. DECIDED: reconstruction confirmed, exact rules in D10.
@@ -294,3 +308,5 @@ paid tier, not on these numbers.
 - 2026-10-07: Second key authenticates but is free tier (20 requests per day per
   model, load shed with our prompt). AI diagnosed it with 30 probe requests,
   recorded D16, and stopped calling the API to preserve quota.
+- 2026-10-07: Human enabled billing and issued an AI Studio key. Smoke passed
+  on first real run. Human chose to stay on Gemini rather than go Claude-only.
