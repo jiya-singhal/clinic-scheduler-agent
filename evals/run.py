@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -22,7 +23,21 @@ from evals.improver import propose
 
 SCENARIOS_DIR = Path("scenarios")
 AUTO_AFFIRM = "Yes, that's right."
+AUTO_CHOOSE = "The first one, please."
 MAX_AUTO_AFFIRM = 3
+
+
+def stand_in_reply(agent_text: str) -> str | None:
+    """Minimal patient stand-in for a scripted scenario whose script has run out (D37, D39).
+    Answers only when no booking exists yet and the agent asked a question that names a slot time:
+    a choice between several times or providers gets 'the first one', a single read-back gets 'yes'."""
+    t = agent_text.rstrip()
+    if not t.endswith("?") or not TIME_RE.search(t):
+        return None
+    times = {m.lower() for m in TIME_RE.findall(t)}
+    if len(times) > 1 or re.search(r"\bwhich\b|\beither\b|\bor\b", t, re.I):
+        return AUTO_CHOOSE
+    return AUTO_AFFIRM
 
 
 def load_scenarios(only: str | None = None) -> list[dict]:
@@ -84,11 +99,13 @@ def run_scenario(sc: dict, *, prompt_text: str, trace_path: Path, model_fn, pati
         # Affirm on demand (D37): a fixed script cannot answer a confirmation question the agent asks after the
         # script's last line. If no booking exists yet and the agent just read back a slot and asked, say yes, at most twice.
         affirmations = 0
-        while (affirmations < MAX_AUTO_AFFIRM and agent.state.turn_count < max_turns and agent.state.booked_appointment_id is None
-               and reply.rstrip().endswith("?") and TIME_RE.search(reply)):
+        while affirmations < MAX_AUTO_AFFIRM and agent.state.turn_count < max_turns and agent.state.booked_appointment_id is None:
+            line = stand_in_reply(reply)
+            if line is None:
+                break
             affirmations += 1
-            agent.log("auto_affirm", text=AUTO_AFFIRM)
-            reply = agent.turn(AUTO_AFFIRM)
+            agent.log("auto_affirm", text=line)
+            reply = agent.turn(line)
     else:
         patient = patient_fn(sc["brief"])
         line = patient(None)

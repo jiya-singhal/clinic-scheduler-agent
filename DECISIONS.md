@@ -639,3 +639,27 @@ Budget note: Phase 3 passed its 90-minute target because the first two loop
 runs each exposed a harness defect. Both are the kind of defect a reviewer
 would want found before trusting an accepted prompt, so they are kept in the
 record rather than hidden.
+
+## D39. Third loop attempt: the race fired, the stand-in patient could not pick `[DECIDED, by evidence]`
+
+Attempt 3 (history/attempt-3/): v1 mean 0.939, 11 of 12. v2 again 0.969, 12 of
+12, confirm_before_book 4 -> 8. Rejected on slot-taken-race alone: score 0.900
+-> 0.863 and booking_count newly failing. The race now fires correctly in both
+versions. In v2, after slot_taken the agent offered two alternatives ("Dr. Lee
+at 1:00 PM, or Dr. Patel at 1:30 PM. Would either work?") and the harness's
+only line, "Yes, that's right", is not an answer to a choice. The agent rightly
+asked which, the harness said yes again, and the three-affirmation budget ran
+out one turn before the booking.
+
+Fix: the stand-in now has two lines instead of one. A question naming more
+than one time, or containing which / either / or, gets "The first one,
+please"; a single read-back gets "Yes, that's right". Still deterministic,
+still only after the script is exhausted and before any booking exists.
+
+Honest framing for the design note: a prompt rule that adds a confirmation
+turn changes the shape of every booking conversation, and a fixed script
+cannot follow it. Three loop runs were spent teaching the harness to hold a
+two-line dialogue. The alternative, a simulated patient for every scenario,
+trades that for non-determinism in the regression gate. For this take-home
+the two-line stand-in is the smaller, more defensible choice; for production
+the simulated patient with many runs per scenario is the right one.

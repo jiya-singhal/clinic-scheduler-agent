@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from evals.run import load_scenarios, run_scenario, write_markdown
+from evals.run import load_scenarios, run_scenario, stand_in_reply, write_markdown
 from evals.score import aggregate
 from tests.test_loop import fake_model
 
@@ -104,3 +104,11 @@ def test_auto_affirm_only_when_script_ends_on_an_unbooked_slot_question(tmp_path
     s2 = sc("identity-fail")
     r2 = run_scenario(s2, prompt_text="P", trace_path=tmp_path / "t2.jsonl", model_fn=fake_model(["no"] * 3 + ["Shall I connect you to staff?"]), judge_fn=None)
     assert r2["turns"] == 4 and not any(json.loads(l)["type"] == "auto_affirm" for l in (tmp_path / "t2.jsonl").read_text().splitlines())
+
+
+def test_stand_in_reply_rules():
+    assert stand_in_reply("Shall I book Dr. Patel on Thursday, October 15th at 1:00 PM?") == "Yes, that's right."
+    assert stand_in_reply("Dr. Lee is open at 1:00 PM, or Dr. Patel at 1:30 PM. Would either of those work?") == "The first one, please."
+    assert stand_in_reply("Which would you prefer: Dr. Lee at 1:00 PM or Dr. Patel at 1:30 PM?") == "The first one, please."
+    assert stand_in_reply("Would you like me to connect you with our staff?") is None   # no time named
+    assert stand_in_reply("You're all set for 1:00 PM with Dr. Lee.") is None            # not a question
