@@ -19,7 +19,7 @@ uv run python -m agent.chat
 uv run python -m evals.run --loop --start prompts/v1.md --max-iterations 3 --auto-apply
 ```
 
-The first is an interactive chat with the agent (Ctrl-D or `quit` to exit). The second evaluates the start prompt, proposes one rule, writes the next free prompt version, re-evaluates all scripted scenarios, applies the regression gate, and writes `history/loop.md`. Without `--auto-apply` it prints the proposed rule and waits for `y/n` before applying it. On a fresh clone the committed `prompts/v2.md` already exists, so a live run writes `prompts/v3.md`; the committed v2 is the recorded run.
+The first is an interactive chat with the agent (Ctrl-D or `quit` to exit). The second evaluates the start prompt, proposes one rule, writes the next free prompt version, re-evaluates all scripted scenarios, applies the regression gate, and writes `history/loop.md`. Without `--auto-apply` it prints the proposed rule and waits for `y/n` before applying it. On a fresh clone the committed `prompts/v2.md` already exists, so a live run writes `prompts/v3.md`; the committed v2 is the recorded run. A report is only reused when its traces are on disk, and `runs/` is not committed, so a fresh clone re-evaluates v1 first (about 10 minutes).
 
 Secondary commands:
 
