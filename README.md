@@ -21,6 +21,25 @@ uv run python -m evals.run --loop --start prompts/v1.md --max-iterations 3 --aut
 
 The first is an interactive chat with the agent (Ctrl-D or `quit` to exit). The second evaluates the start prompt, proposes one rule, writes the next free prompt version, re-evaluates all scripted scenarios, applies the regression gate, and writes `history/loop.md`. Without `--auto-apply` it prints the proposed rule and waits for `y/n` before applying it. On a fresh clone the committed `prompts/v2.md` already exists, so a live run writes `prompts/v3.md`; the committed v2 is the recorded run. A report is only reused when its traces are on disk, and `runs/` is not committed, so a fresh clone re-evaluates v1 first (about 10 minutes).
 
+Example session with the learned prompt (`--prompt prompts/v2.md`; patient lines are echoed when input is piped):
+
+```
+patient> Hi, I'd like to book an appointment.
+agent> I can certainly help with that. Could you please share your full name and date of birth?
+
+patient> Maria Gonzalez, 14 March 1985.
+agent> Thanks, Maria. What is the reason for your visit, and do you have a preferred day or doctor?
+
+patient> A check-up, Wednesday the 14th morning, Dr. Lee.
+agent> Dr. Lee has openings on Wednesday, October 14th starting at 9:00 AM, with times like 9:30 and 10:00 AM. Would any of those work for you?
+
+patient> The 9:30 please.
+agent> I have you down for Dr. Marcus Lee on Wednesday, October 14th at 9:30 AM for a check-up. Would you like me to go ahead and book that?
+
+patient> Yes, that's right.
+agent> You're all booked with Dr. Marcus Lee on Wednesday, October 14th at 9:30 AM. Is there anything else I can help you with today?
+```
+
 Secondary commands:
 
 ```
