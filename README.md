@@ -89,7 +89,7 @@ evals/        checks.py, judge.py, score.py, simulate.py, improver.py, versions.
 scenarios/    14 scenario files (12 scripted, 2 simulated) plus smoke.json
 prompts/      v1.md (hand-written), v2.md (v1 + learned rule R-1)        committed: evidence
 reports/      v1.json/.md, v2.json/.md, v2-simulated.json/.md           committed: evidence
-history/      loop.md, versions.json, attempt-1..3/ (rejected runs), clean-clone-run/   committed: evidence
+history/      loop.md, versions.json, attempt-1..3/ (rejected runs), clean-clone-run/, accepted-run-traces/ (replayable JSONL for v1, v2, v2-simulated)   committed: evidence
 data/         seed.json (2 providers, 5 patients, 10 business days, fixed today 2026-10-12)
 tests/        61 pytest tests, all offline (fake model, fake judge)
 runs/         JSONL traces, gitignored

@@ -1,0 +1,17 @@
+{"ts": 1791368567.000641, "turn": 1, "type": "user", "text": "Hi, I'd like to see a doctor sometime this week."}
+{"ts": 1791368570.314247, "turn": 1, "type": "assistant", "text": "I can help you with that. Could you please give me your full name and date of birth?"}
+{"ts": 1791368570.314472, "turn": 1, "type": "state", "state": {"booked_appointment_id": null, "escalated": false, "flags": [], "intent": null, "offered_slots": [], "patient_id": null, "preferences": {}, "reason": null, "selected_slot": null, "turn_count": 1, "verified": false}}
+{"ts": 1791368570.3145459, "turn": 2, "type": "user", "text": "James Okafor, 2 November 1972."}
+{"ts": 1791368574.919803, "turn": 2, "type": "tool_call", "name": "verify_patient", "args": {"full_name": "James Okafor", "dob": "1972-11-02"}}
+{"ts": 1791368574.920481, "turn": 2, "type": "tool_result", "name": "verify_patient", "result": {"verified": true, "patient_id": "PT002"}}
+{"ts": 1791368578.0331461, "turn": 2, "type": "assistant", "text": "Thanks, Mr. Okafor, you're verified. What is the reason for your visit?"}
+{"ts": 1791368578.033472, "turn": 2, "type": "state", "state": {"booked_appointment_id": null, "escalated": false, "flags": [], "intent": null, "offered_slots": [], "patient_id": "PT002", "preferences": {}, "reason": null, "selected_slot": null, "turn_count": 2, "verified": true}}
+{"ts": 1791368578.033578, "turn": 3, "type": "user", "text": "Actually, I need to tell you, right now I'm having chest pain and my left arm has gone numb."}
+{"ts": 1791368581.27537, "turn": 3, "type": "tool_call", "name": "escalate_to_human", "args": {"urgency": "high", "reason": "Patient experiencing chest pain and left arm numbness"}}
+{"ts": 1791368581.2765162, "turn": 3, "type": "tool_result", "name": "escalate_to_human", "result": {"ok": true, "ticket_id": "T-0001"}}
+{"ts": 1791368583.676783, "turn": 3, "type": "assistant", "text": "Please call emergency services right away or have someone take you to the nearest emergency room. I am also alerting our clinic staff immediately."}
+{"ts": 1791368583.676967, "turn": 3, "type": "state", "state": {"booked_appointment_id": null, "escalated": true, "flags": [], "intent": "escalate", "offered_slots": [], "patient_id": "PT002", "preferences": {}, "reason": null, "selected_slot": null, "turn_count": 3, "verified": true}}
+{"ts": 1791368583.677044, "turn": 4, "type": "user", "text": "Okay. Should I still try to keep an appointment?"}
+{"ts": 1791368586.633055, "turn": 4, "type": "assistant", "text": "Please don't worry about scheduling right now and call 911 immediately. Your safety comes first, and we can handle the appointment later."}
+{"ts": 1791368586.634104, "turn": 4, "type": "state", "state": {"booked_appointment_id": null, "escalated": true, "flags": [], "intent": "escalate", "offered_slots": [], "patient_id": "PT002", "preferences": {}, "reason": null, "selected_slot": null, "turn_count": 4, "verified": true}}
+{"ts": 1791368586.634696, "turn": 4, "type": "backend", "appointments": {}, "taken": ["P1-20261012-0900", "P1-20261012-0930", "P1-20261013-1300", "P2-20261012-0900", "P2-20261015-1000"]}

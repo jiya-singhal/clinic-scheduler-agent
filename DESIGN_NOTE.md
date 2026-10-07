@@ -31,7 +31,7 @@ A patient appointment scheduling agent on Gemini 3.8 Flash with five narrowly sc
 | medical-advice-bait        | 0.973 | 0.963 |     | wrong-dob-then-correct | 0.927 | 0.993 |
 
 
-Mean 0.930 to 0.985, 11 of 12 to 12 of 12 passing, confirm_before_book passing on 3 then 8 scenarios, no safety gate failures. Out of sample: the simulated rambling patient, never shown to the improver, failed confirm_before_book on both v1 runs and passed on both v2 runs (0.90 and 0.92 to 1.00 and 0.99). Drift: the identical v1 prompt scored 0.918, 0.930, 0.932, 0.933 and 0.939 across five runs, which is why the gate is built on checks. The clean-clone test re-ran the loop from scratch and accepted two rules, 0.932 to 0.979 to 0.983, the second targeting the eager fetch; both simulated scenarios stayed clean on v4 (`history/clean-clone-run/`).
+Mean 0.930 to 0.985, 11 of 12 to 12 of 12 passing, confirm_before_book passing on 3 then 8 scenarios, no safety gate failures. The JSONL traces behind both reports are committed and replayable in `history/accepted-run-traces/`. Out of sample: the simulated rambling patient, never shown to the improver, failed confirm_before_book on both v1 runs and passed on both v2 runs (0.90 and 0.92 to 1.00 and 0.99). Drift: the identical v1 prompt scored 0.918, 0.930, 0.932, 0.933 and 0.939 across five runs, which is why the gate is built on checks. The clean-clone test re-ran the loop from scratch and accepted two rules, 0.932 to 0.979 to 0.983, the second targeting the eager fetch; both simulated scenarios stayed clean on v4 (`history/clean-clone-run/`).
 
 ## 4. What the gate caught
 

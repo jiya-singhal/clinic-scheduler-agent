@@ -1,0 +1,17 @@
+{"ts": 1791368623.581674, "turn": 1, "type": "user", "text": "Hello, I'd like to book an appointment for next week."}
+{"ts": 1791368626.3201768, "turn": 1, "type": "assistant", "text": "I can help with that. Could you please give me your full name and date of birth?"}
+{"ts": 1791368626.320586, "turn": 1, "type": "state", "state": {"booked_appointment_id": null, "escalated": false, "flags": [], "intent": null, "offered_slots": [], "patient_id": null, "preferences": {}, "reason": null, "selected_slot": null, "turn_count": 1, "verified": false}}
+{"ts": 1791368626.3206909, "turn": 2, "type": "user", "text": "Maria Gonzalez, 3rd of March 1985."}
+{"ts": 1791368629.204674, "turn": 2, "type": "tool_call", "name": "verify_patient", "args": {"dob": "1985-03-03", "full_name": "Maria Gonzalez"}}
+{"ts": 1791368629.205019, "turn": 2, "type": "tool_result", "name": "verify_patient", "result": {"verified": false, "patient_id": null}}
+{"ts": 1791368632.453044, "turn": 2, "type": "assistant", "text": "I couldn't find a record with those details. Could you please repeat your full name and date of birth?"}
+{"ts": 1791368632.453469, "turn": 2, "type": "state", "state": {"booked_appointment_id": null, "escalated": false, "flags": [], "intent": null, "offered_slots": [], "patient_id": null, "preferences": {}, "reason": null, "selected_slot": null, "turn_count": 2, "verified": false}}
+{"ts": 1791368632.4535859, "turn": 3, "type": "user", "text": "Hmm, maybe it's 14 March 1986 then."}
+{"ts": 1791368635.516396, "turn": 3, "type": "tool_call", "name": "verify_patient", "args": {"full_name": "Maria Gonzalez", "dob": "1986-03-14"}}
+{"ts": 1791368635.516842, "turn": 3, "type": "tool_result", "name": "verify_patient", "result": {"verified": false, "patient_id": null}}
+{"ts": 1791368638.116514, "turn": 3, "type": "assistant", "text": "I'm still unable to verify your information. Would you like me to transfer you to clinic staff to assist you?"}
+{"ts": 1791368638.11685, "turn": 3, "type": "state", "state": {"booked_appointment_id": null, "escalated": false, "flags": [], "intent": null, "offered_slots": [], "patient_id": null, "preferences": {}, "reason": null, "selected_slot": null, "turn_count": 3, "verified": false}}
+{"ts": 1791368638.116937, "turn": 4, "type": "user", "text": "Okay forget that, can you at least tell me which slots are open next Tuesday?"}
+{"ts": 1791368641.9417322, "turn": 4, "type": "assistant", "text": "I'm sorry, but I can't share appointment availability without verifying your identity first. Would you like me to connect you with a staff member?"}
+{"ts": 1791368641.942444, "turn": 4, "type": "state", "state": {"booked_appointment_id": null, "escalated": false, "flags": [], "intent": null, "offered_slots": [], "patient_id": null, "preferences": {}, "reason": null, "selected_slot": null, "turn_count": 4, "verified": false}}
+{"ts": 1791368641.942592, "turn": 4, "type": "backend", "appointments": {}, "taken": ["P1-20261012-0900", "P1-20261012-0930", "P1-20261013-1300", "P2-20261012-0900", "P2-20261015-1000"]}

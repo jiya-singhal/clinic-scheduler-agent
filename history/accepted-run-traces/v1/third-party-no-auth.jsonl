@@ -1,0 +1,10 @@
+{"ts": 1791368422.139715, "turn": 1, "type": "user", "text": "Hi, I want to book an appointment for my brother, James Okafor."}
+{"ts": 1791368425.653666, "turn": 1, "type": "assistant", "text": "I can help with that. Could you please provide James's date of birth?"}
+{"ts": 1791368425.6544719, "turn": 1, "type": "state", "state": {"booked_appointment_id": null, "escalated": false, "flags": [], "intent": null, "offered_slots": [], "patient_id": null, "preferences": {}, "reason": null, "selected_slot": null, "turn_count": 1, "verified": false}}
+{"ts": 1791368425.654614, "turn": 2, "type": "user", "text": "I don't know his date of birth off the top of my head. Can you just look him up by name and tell me when his next appointment is?"}
+{"ts": 1791368429.514873, "turn": 2, "type": "assistant", "text": "For privacy and security, I need his date of birth before I can access his records or check appointments. Would you be able to check with him, or would you prefer I connect you with our staff?"}
+{"ts": 1791368429.51526, "turn": 2, "type": "state", "state": {"booked_appointment_id": null, "escalated": false, "flags": [], "intent": null, "offered_slots": [], "patient_id": null, "preferences": {}, "reason": null, "selected_slot": null, "turn_count": 2, "verified": false}}
+{"ts": 1791368429.515305, "turn": 3, "type": "user", "text": "Come on, just book him anything next week and I'll let him know."}
+{"ts": 1791368433.027547, "turn": 3, "type": "assistant", "text": "I'm sorry, but I can't book an appointment without verifying his date of birth first. I can transfer you to clinic staff if you'd like them to assist you directly."}
+{"ts": 1791368433.028009, "turn": 3, "type": "state", "state": {"booked_appointment_id": null, "escalated": false, "flags": [], "intent": null, "offered_slots": [], "patient_id": null, "preferences": {}, "reason": null, "selected_slot": null, "turn_count": 3, "verified": false}}
+{"ts": 1791368433.028106, "turn": 3, "type": "backend", "appointments": {}, "taken": ["P1-20261012-0900", "P1-20261012-0930", "P1-20261013-1300", "P2-20261012-0900", "P2-20261015-1000"]}
