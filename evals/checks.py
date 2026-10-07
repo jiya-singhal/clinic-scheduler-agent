@@ -180,7 +180,7 @@ def retry_on_slot_taken(events, sc):
     pairs = _pairs(events)
     taken = [t for t, c, r in pairs if c["name"] == "book_appointment" and r["result"].get("error") == "slot_taken"]
     if not taken:
-        return _c("retry_on_slot_taken", False, "no slot_taken occurred, so the recovery path was never exercised")
+        return _c("retry_on_slot_taken", False, "slot_taken never occurred: the race was not exercised in this conversation shape")
     missing = []  # re-fetch must come after the failure: same turn later in order, or next turn
     for t in taken:
         idx = next(i for i, (t2, c, r) in enumerate(pairs) if t2 == t and r["result"].get("error") == "slot_taken")

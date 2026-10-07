@@ -11,15 +11,13 @@
     "Hi, I need a check-up this week.",
     "Sarah Whitfield, 9 September 2001.",
     "Thursday the 15th in the afternoon, any doctor.",
-    "The first one, please book it.",
-    "Oh no. What else do you have Thursday afternoon?",
-    "Fine, book that one."
+    "The first one, please book it."
   ],
   "faults": [
     {
-      "after_tool": "get_available_slots",
+      "before_tool": "book_appointment",
       "action": "take_slot",
-      "which": "first_offered"
+      "which": "requested"
     }
   ],
   "expect": {
@@ -28,5 +26,6 @@
     "confirm_before_book": true,
     "retry_on_slot_taken": true
   },
-  "max_turns": 12
+  "max_turns": 12,
+  "notes": "The slot the patient picks is taken the moment the agent tries to book it. Recovery is driven by the agent offering an alternative and the harness affirming (D37)."
 }

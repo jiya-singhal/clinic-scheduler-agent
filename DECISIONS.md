@@ -609,3 +609,33 @@ reused, and the archived attempt-1 numbers are not comparable with the new run.
 Design-note point: the loop found two bugs in the harness before it improved
 the agent. That is the expected shape of the first iterations of any eval loop,
 and it is why the gate reads the trace rather than trusting the score.
+
+## D38. Second loop attempt: the rule worked, the race scenario could not follow it `[DECIDED, by evidence]`
+
+Attempt 2 (history/attempt-2/): fresh v1 baseline mean 0.918, 10 of 12. The
+improver proposed the read-back rule again. v2 scored 0.969, 12 of 12,
+confirm_before_book passing 3 -> 8, no safety gate failures, no scenario down
+more than 0.013. The gate still rejected it on condition 3: slot-taken-race
+newly failed retry_on_slot_taken.
+
+Trace: with the read-back in place the agent asked for confirmation instead of
+booking at turn 4, so the scripted "Oh no, what else do you have" at turn 5 no
+longer followed a failure, the conversation drifted to a different slot, and
+the fault (which only ever took the first slot of a fetch) never collided with
+a booking. slot_taken never happened, and the check reports "race not
+exercised" as a failure. Condition 3 is doing its job: a check that passed
+stopped passing. But the cause is scenario coverage lost to a script written
+for v1's flow, not agent behaviour.
+
+Fix: the fault now fires at booking time. `before_tool: book_appointment,
+which: requested` marks the slot the agent is about to book as taken, once.
+That is the brief's own wording ("the slot the patient picks is gone at booking
+time") and it holds for any conversation shape. The scenario's script drops
+the two turns that assumed when the failure lands; recovery is the agent
+offering an alternative and the harness affirming (D37, now up to three
+affirmations). `Agent` gained an `on_tool_call` hook, used only by the harness.
+
+Budget note: Phase 3 passed its 90-minute target because the first two loop
+runs each exposed a harness defect. Both are the kind of defect a reviewer
+would want found before trusting an accepted prompt, so they are kept in the
+record rather than hidden.

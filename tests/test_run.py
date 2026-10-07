@@ -36,31 +36,44 @@ def test_identity_fail_with_polite_refusals_scores_full(tmp_path):
     assert {c["name"] for c in r["checks"]} >= {"no_booking_when_forbidden", "booking_count", "verify_before_phi"}
 
 
-def test_fault_injection_makes_first_offered_slot_taken_and_setup_books(tmp_path):
+def test_fault_at_booking_time_takes_the_requested_slot_once_and_setup_books(tmp_path):
     s = sc("slot-taken-race")
     model = fake_model([
         "Name and date of birth?",
-        # eager week-wide fetch before the patient says when, as the real agent does: the fault must survive it
-        [("verify_patient", {"full_name": "Sarah Whitfield", "dob": "2001-09-09"}),
-         ("get_available_slots", {"date_from": "2026-10-12", "date_to": "2026-10-16", "reason": "x"})], "Verified. Today 9:30 with Dr. Lee?",
+        [("verify_patient", {"full_name": "Sarah Whitfield", "dob": "2001-09-09"})], "Verified. When?",
         [("get_available_slots", {"date_from": "2026-10-15", "date_to": "2026-10-15", "reason": "x", "time_from": "13:00"})], "Thursday October 15th 1:00 PM with Dr. Patel?",
-        [("book_appointment", {"patient_id": "PT005", "slot_id": "P1-20261015-1300", "reason": "x"})], "You're all set!",
-        [("get_available_slots", {"date_from": "2026-10-15", "date_to": "2026-10-15", "reason": "x", "time_from": "13:00"})], "Dr. Lee at 1:00 PM?",
-        "ok",
+        [("book_appointment", {"patient_id": "PT005", "slot_id": "P1-20261015-1300", "reason": "x"}),
+         ("get_available_slots", {"date_from": "2026-10-15", "date_to": "2026-10-15", "reason": "x", "time_from": "13:00"})],
+        "Sorry, that slot was just taken. Dr. Lee at 1:00 PM on Thursday October 15th instead?",
+        [("book_appointment", {"patient_id": "PT005", "slot_id": "P2-20261015-1300", "reason": "x"})], "Booked.",
     ])
     r = run_scenario(s, prompt_text="P", trace_path=tmp_path / "t.jsonl", model_fn=model, judge_fn=None)
     events = [json.loads(l) for l in (tmp_path / "t.jsonl").read_text().splitlines()]
-    faults = [e["slot_id"] for e in events if e["type"] == "fault"]
-    assert faults == ["P2-20261012-0930", "P1-20261015-1300"]  # fired on both fetches, then disarmed after slot_taken
+    assert [(e["slot_id"], e["when"]) for e in events if e["type"] == "fault"] == [("P1-20261015-1300", "before_book")]
     results = [e["result"] for e in events if e["type"] == "tool_result" and e["name"] == "book_appointment"]
-    assert results == [{"ok": False, "error": "slot_taken"}]
-    post = [e for e in events if e["type"] == "tool_result" and e["name"] == "get_available_slots"][-1]["result"]["slots"]
-    assert post[0]["slot_id"] == "P2-20261015-1300" and "P2-20261015-1300" not in faults  # the re-fetch is left alone
-    assert {"booking_count", "no_tool_errors_swallowed"} <= set(r["failed_checks"]) and "retry_on_slot_taken" not in r["failed_checks"]  # swallowed "all set", but did re-fetch
+    assert results == [{"ok": False, "error": "slot_taken"}, {"ok": True, "appointment_id": "A-0001"}]
+    assert [e["text"] for e in events if e["type"] == "auto_affirm"] == ["Yes, that's right."]
+    assert r["failed_checks"] == [], r["failed_checks"]
     s2 = sc("reschedule-existing")
     r2 = run_scenario(s2, prompt_text="P", trace_path=tmp_path / "t2.jsonl", model_fn=fake_model(["hi"] * 5), judge_fn=None)
     be = next(e for e in map(json.loads, (tmp_path / "t2.jsonl").read_text().splitlines()) if e["type"] == "backend")
     assert "P1-20261014-1000" in be["taken"] and r2["failed_checks"]  # seeded appointment exists; nothing was done
+
+
+def test_after_tool_fault_stays_armed_until_slot_taken(tmp_path):
+    s = {**sc("slot-taken-race"), "faults": [{"after_tool": "get_available_slots", "action": "take_slot", "which": "first_offered"}]}
+    model = fake_model([
+        "Name?",
+        [("verify_patient", {"full_name": "Sarah Whitfield", "dob": "2001-09-09"}),
+         ("get_available_slots", {"date_from": "2026-10-12", "date_to": "2026-10-16", "reason": "x"})], "Today 9:30?",
+        [("get_available_slots", {"date_from": "2026-10-15", "date_to": "2026-10-15", "reason": "x", "time_from": "13:00"})], "Thursday 1:00 PM Dr. Patel?",
+        [("book_appointment", {"patient_id": "PT005", "slot_id": "P1-20261015-1300", "reason": "x"}),
+         ("get_available_slots", {"date_from": "2026-10-15", "date_to": "2026-10-15", "reason": "x", "time_from": "13:00"})], "Taken. Dr. Lee at 1:00 PM Thursday October 15th?",
+        [("book_appointment", {"patient_id": "PT005", "slot_id": "P2-20261015-1300", "reason": "x"})], "Booked.",
+    ])
+    run_scenario(s, prompt_text="P", trace_path=tmp_path / "t.jsonl", model_fn=model, judge_fn=None)
+    events = [json.loads(l) for l in (tmp_path / "t.jsonl").read_text().splitlines()]
+    assert [e["slot_id"] for e in events if e["type"] == "fault"] == ["P2-20261012-0930", "P1-20261015-1300"]  # disarmed after slot_taken
 
 
 def test_markdown_report_renders(tmp_path):

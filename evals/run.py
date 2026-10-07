@@ -22,7 +22,7 @@ from evals.improver import propose
 
 SCENARIOS_DIR = Path("scenarios")
 AUTO_AFFIRM = "Yes, that's right."
-MAX_AUTO_AFFIRM = 2
+MAX_AUTO_AFFIRM = 3
 
 
 def load_scenarios(only: str | None = None) -> list[dict]:
@@ -33,14 +33,26 @@ def load_scenarios(only: str | None = None) -> list[dict]:
     return scs
 
 
-def make_fault_hook(clinic: Clinic, faults: list[dict], agent_ref: list):
-    """take_slot stays armed, taking the first slot of every fetch, until the agent actually hits slot_taken once.
-    The agent may fetch before the patient has said when (it does), so firing once on the first fetch misses the race."""
+def make_fault_hooks(clinic: Clinic, faults: list[dict], agent_ref: list):
+    """Returns (on_tool_call, on_tool_result).
+    before_tool=book_appointment, which=requested: the slot the patient picked is gone at booking time, whatever the
+    conversation shape (D38). Fires once.
+    after_tool=get_available_slots, which=first_offered: takes the first slot of every fetch until slot_taken is hit (D26)."""
     disarmed = set()
 
-    def hook(name, args, result):
+    def before(name, args):
         for i, f in enumerate(faults):
-            if i in disarmed:
+            if i in disarmed or f.get("before_tool") != name or f["action"] != "take_slot":
+                continue
+            sid = args.get("slot_id") if f.get("which", "requested") == "requested" else f["which"]
+            if sid and sid in clinic.slots and sid not in clinic.taken:
+                clinic.taken[sid] = "FAULT"
+                disarmed.add(i)
+                agent_ref[0].log("fault", action="take_slot", slot_id=sid, when="before_book")
+
+    def after(name, args, result):
+        for i, f in enumerate(faults):
+            if i in disarmed or "after_tool" not in f:
                 continue
             if f["action"] == "take_slot" and name == "book_appointment" and result.get("error") == "slot_taken":
                 disarmed.add(i)
@@ -48,7 +60,7 @@ def make_fault_hook(clinic: Clinic, faults: list[dict], agent_ref: list):
                 sid = result["slots"][0]["slot_id"] if f.get("which", "first_offered") == "first_offered" else f["which"]
                 clinic.taken[sid] = "FAULT"
                 agent_ref[0].log("fault", action="take_slot", slot_id=sid)
-    return hook
+    return before, after
 
 
 def run_scenario(sc: dict, *, prompt_text: str, trace_path: Path, model_fn, patient_fn=None, judge_fn=None) -> dict:
@@ -61,8 +73,8 @@ def run_scenario(sc: dict, *, prompt_text: str, trace_path: Path, model_fn, pati
     trace_path.parent.mkdir(parents=True, exist_ok=True)
     trace_path.unlink(missing_ok=True)
     ref: list = []
-    hook = make_fault_hook(clinic, sc.get("faults", []), ref) if sc.get("faults") else None
-    agent = Agent(clinic, model_fn, trace_path, system_prompt=prompt_text, on_tool_result=hook)
+    before, after = make_fault_hooks(clinic, sc.get("faults", []), ref) if sc.get("faults") else (None, None)
+    agent = Agent(clinic, model_fn, trace_path, system_prompt=prompt_text, on_tool_result=after, on_tool_call=before)
     ref.append(agent)
     max_turns = sc.get("max_turns", 12)
     if sc["mode"] == "scripted":

@@ -45,10 +45,12 @@ def gemini_model(client, model: str = MODEL) -> ModelFn:
 
 class Agent:
     def __init__(self, clinic: Clinic, model: ModelFn, trace_path: Path | None = None,
-                 system_prompt: str | None = None, on_tool_result: Callable[[str, dict, dict], None] | None = None):
+                 system_prompt: str | None = None, on_tool_result: Callable[[str, dict, dict], None] | None = None,
+                 on_tool_call: Callable[[str, dict], None] | None = None):
         self.clinic, self.model = clinic, model
         self.system_prompt = system_prompt if system_prompt is not None else DEFAULT_PROMPT_PATH.read_text().strip()
         self.on_tool_result = on_tool_result
+        self.on_tool_call = on_tool_call  # runs before dispatch; eval fault injection only
         self.state = ConversationState()
         self.history: list[types.Content] = []
         if trace_path is None:
@@ -89,6 +91,8 @@ class Agent:
                     result = {"ok": False, "error": "tool_budget_exhausted"}
                     self.flag("tool_cap_hit")
                 else:
+                    if self.on_tool_call:
+                        self.on_tool_call(fc.name, args)
                     result = dispatch(self.clinic, self.state, fc.name, args)
                     apply(self.state, fc.name, args, result)
                     if result.get("error") == "slot_not_offered":
