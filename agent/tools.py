@@ -20,7 +20,9 @@ TOOL_SCHEMAS = [
             "provider_id": {"type": "string", "nullable": True, "description": "P1 (Dr. Asha Patel) or P2 (Dr. Marcus Lee); null for any"},
             "date_from": {"type": "string", "description": "YYYY-MM-DD inclusive"},
             "date_to": {"type": "string", "description": "YYYY-MM-DD inclusive"},
-            "reason": {"type": "string", "description": "Patient's reason for the visit"}},
+            "reason": {"type": "string", "description": "Patient's reason for the visit"},
+            "time_from": {"type": "string", "nullable": True, "description": "Earliest start time HH:MM, e.g. 13:00 for afternoon"},
+            "time_to": {"type": "string", "nullable": True, "description": "Latest start time HH:MM exclusive, e.g. 12:00 for morning"}},
             "required": ["date_from", "date_to", "reason"]},
     },
     {
@@ -31,6 +33,11 @@ TOOL_SCHEMAS = [
             "slot_id": {"type": "string"},
             "reason": {"type": "string"}},
             "required": ["patient_id", "slot_id", "reason"]},
+    },
+    {
+        "name": "list_appointments",
+        "description": "List the verified patient's own upcoming appointments, with appointment ids. Needed before cancelling or rescheduling.",
+        "parameters": {"type": "object", "properties": {"patient_id": {"type": "string"}}, "required": ["patient_id"]},
     },
     {
         "name": "cancel_appointment",
@@ -58,7 +65,7 @@ def dispatch(clinic: Clinic, state: ConversationState, name: str, args: dict) ->
     if name == "book_appointment" and args.get("slot_id") not in state.offered_slots:
         return {"ok": False, "error": "slot_not_offered"}
     if name == "get_available_slots":
-        args = {"provider_id": None, **args}
+        args = {"provider_id": None, "time_from": None, "time_to": None, **args}
     try:
         return getattr(clinic, name)(**args)
     except (TypeError, ValueError) as e:  # bad or missing arguments from the model

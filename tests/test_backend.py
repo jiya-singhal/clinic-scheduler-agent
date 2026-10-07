@@ -63,3 +63,22 @@ def test_cancel_frees_slot_and_only_own():
 
 def test_escalate_returns_ticket():
     assert clinic().escalate_to_human("chest pain", "high") == {"ok": True, "ticket_id": "T-0001"}
+
+
+def test_time_window_filters_slots():
+    c = clinic()
+    r = c.get_available_slots(None, "2026-10-20", "2026-10-20", "x", time_from="13:00")
+    assert [s["slot_id"] for s in r["slots"]][:2] == ["P1-20261020-1300", "P2-20261020-1300"]
+    r = c.get_available_slots("P1", "2026-10-20", "2026-10-20", "x", time_to="12:00")
+    assert all(s["start"].endswith(("09:00", "09:30", "10:00", "10:30", "11:00", "11:30")) for s in r["slots"])
+
+
+def test_list_appointments_only_own_and_only_verified():
+    c = clinic()
+    p1, p2 = verified(c), verified(c, "James Okafor", "1972-11-02")
+    a1 = c.book_appointment(p1, "P1-20261014-1000", "checkup")["appointment_id"]
+    c.book_appointment(p2, "P2-20261014-1000", "x")
+    assert c.list_appointments("PT003") == {"ok": False, "error": "not_verified"}
+    r = c.list_appointments(p1)
+    assert [a["appointment_id"] for a in r["appointments"]] == [a1]
+    assert r["appointments"][0]["provider"] == "Dr. Asha Patel" and r["appointments"][0]["start"] == "2026-10-14T10:00"

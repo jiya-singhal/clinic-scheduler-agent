@@ -66,13 +66,18 @@ class Clinic:
                 return {"verified": True, "patient_id": p["id"]}
         return {"verified": False, "patient_id": None}
 
-    def get_available_slots(self, provider_id: str | None, date_from: str, date_to: str, reason: str) -> dict:
+    def get_available_slots(self, provider_id: str | None, date_from: str, date_to: str, reason: str,
+                            time_from: str | None = None, time_to: str | None = None) -> dict:
         lo, hi = date.fromisoformat(date_from), date.fromisoformat(date_to)
+        t_lo = datetime.strptime(time_from, "%H:%M").time() if time_from else None
+        t_hi = datetime.strptime(time_to, "%H:%M").time() if time_to else None
         found = sorted(
             (s for s in self.slots.values()
              if s.slot_id not in self.taken
              and (provider_id is None or s.provider_id == provider_id)
-             and lo <= s.start.date() <= hi),
+             and lo <= s.start.date() <= hi
+             and (t_lo is None or s.start.time() >= t_lo)
+             and (t_hi is None or s.start.time() < t_hi)),
             key=lambda s: (s.start, s.provider_id),
         )
         return {
@@ -95,6 +100,14 @@ class Clinic:
         self.taken[slot_id] = appt_id
         self.appointments[appt_id] = {"patient_id": patient_id, "slot_id": slot_id, "reason": reason}
         return {"ok": True, "appointment_id": appt_id}
+
+    def list_appointments(self, patient_id: str) -> dict:
+        if patient_id not in self.verified:
+            return {"ok": False, "error": "not_verified"}
+        own = [{"appointment_id": aid, "slot_id": a["slot_id"], "provider": self.providers[self.slots[a["slot_id"]].provider_id],
+                "start": self.slots[a["slot_id"]].start.isoformat(timespec="minutes"), "reason": a["reason"]}
+               for aid, a in self.appointments.items() if a["patient_id"] == patient_id]
+        return {"ok": True, "appointments": sorted(own, key=lambda a: a["start"])}
 
     def cancel_appointment(self, patient_id: str, appointment_id: str) -> dict:
         if patient_id not in self.verified:
