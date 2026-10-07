@@ -23,7 +23,8 @@ DONE = "DONE"
 def gemini_patient(client, brief: dict, model: str):
     """Returns next_line(assistant_text | None) -> patient utterance. Keeps its own history."""
     history: list[types.Content] = []
-    config = types.GenerateContentConfig(system_instruction=SIM_PROMPT.format(brief=json.dumps(brief, indent=1)), temperature=0)
+    config = types.GenerateContentConfig(system_instruction=SIM_PROMPT.format(brief=json.dumps(brief, indent=1)), temperature=0,
+                                         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True))
 
     def next_line(assistant_text: str | None) -> str:
         history.append(types.Content(role="user", parts=[types.Part(text=assistant_text or "(The call connects. The assistant is listening.)")]))
