@@ -27,7 +27,7 @@ TOOL_SCHEMAS = [
     },
     {
         "name": "book_appointment",
-        "description": "Book a slot for a verified patient. slot_id must be one returned by get_available_slots.",
+        "description": "Book a slot for a verified patient. slot_id must be one returned by get_available_slots. Refused with escalated_session after a high-urgency escalation.",
         "parameters": {"type": "object", "properties": {
             "patient_id": {"type": "string"},
             "slot_id": {"type": "string"},

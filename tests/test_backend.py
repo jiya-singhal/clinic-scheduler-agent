@@ -82,3 +82,13 @@ def test_list_appointments_only_own_and_only_verified():
     r = c.list_appointments(p1)
     assert [a["appointment_id"] for a in r["appointments"]] == [a1]
     assert r["appointments"][0]["provider"] == "Dr. Asha Patel" and r["appointments"][0]["start"] == "2026-10-14T10:00"
+
+
+def test_high_urgency_escalation_locks_booking_for_the_session():
+    c = clinic()
+    p1 = verified(c)
+    assert c.escalate_to_human("asked to connect to staff", "low")["ok"]
+    assert c.book_appointment(p1, "P1-20261012-1000", "x")["ok"]  # low urgency does not lock
+    c.escalate_to_human("chest pain and arm numbness", "high")
+    assert c.book_appointment(p1, "P1-20261012-1030", "x") == {"ok": False, "error": "escalated_session"}
+    assert c.book_appointment(p1, "P1-20261012-1000", "x") == {"ok": False, "error": "escalated_session"}  # even the idempotent path

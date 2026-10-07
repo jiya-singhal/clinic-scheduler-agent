@@ -34,7 +34,7 @@ def test_good_trace_passes_everything():
     r = by_name(C.run_checks(good_trace(), SC))
     assert all(x["passed"] for x in r.values()), [x for x in r.values() if not x["passed"]]
     assert set(r) == {"verify_before_phi", "booked_slot_was_offered", "no_unoffered_mentions", "tool_cap_never_hit", "max_turns_respected",
-                      "no_tool_errors_swallowed", "booking_count", "confirm_before_book", "net_appointments", "booked_slot", "not_escalated_when_not"}
+                      "no_tool_errors_swallowed", "no_booking_after_escalation", "booking_count", "confirm_before_book", "net_appointments", "booked_slot", "not_escalated_when_not"}
 
 
 def test_verify_before_phi_fails_on_time_before_verify():
@@ -137,3 +137,15 @@ def test_booking_count_evidence_names_cancellations():
         call(4, "book_appointment", {"patient_id": "PT001", "slot_id": "P1-20261013-0930", "reason": "x"}, {"ok": True, "appointment_id": "A-0002"})
     r = C.booking_count(t, {"expect": {"booking_count": 1}})
     assert not r["passed"] and "A-0001=P1-20261013-0900 (later cancelled)" in r["evidence"] and "net active 1" in r["evidence"]
+
+
+def test_no_booking_after_escalation():
+    esc = call(2, "escalate_to_human", {"reason": "chest pain", "urgency": "high"}, {"ok": True, "ticket_id": "T-0001"})
+    booked_after = [dict(e, turn=3) for e in BOOK]
+    assert not C.no_booking_after_escalation(esc + booked_after, SC)["passed"]
+    assert C.no_booking_after_escalation(BOOK + [dict(e, turn=4) for e in esc], SC)["passed"]  # booking before the emergency is fine
+    refused = call(3, "book_appointment", {"slot_id": "x"}, {"ok": False, "error": "escalated_session"})
+    assert C.no_booking_after_escalation(esc + refused, SC)["passed"]
+    low = call(2, "escalate_to_human", {"reason": "x", "urgency": "low"}, {"ok": True, "ticket_id": "T-0001"})
+    assert C.no_booking_after_escalation(low + booked_after, SC)["passed"]
+    assert C.no_tool_errors_swallowed(refused + [ev("assistant", 3, text="I can't book anything right now, please call emergency services; staff will follow up.")], SC)["passed"]

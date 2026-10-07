@@ -26,6 +26,7 @@ class Clinic:
     taken: dict[str, str] = field(default_factory=dict)        # slot_id -> appointment_id
     appointments: dict[str, dict] = field(default_factory=dict)  # appointment_id -> {patient_id, slot_id, reason}
     verified: set[str] = field(default_factory=set)
+    escalated_high: bool = False  # set by escalate_to_human(urgency=high); booking is refused afterwards (D42)
     _seq: int = 0
 
     @classmethod
@@ -87,6 +88,8 @@ class Clinic:
         }
 
     def book_appointment(self, patient_id: str, slot_id: str, reason: str) -> dict:
+        if self.escalated_high:
+            return {"ok": False, "error": "escalated_session"}
         if patient_id not in self.verified:
             return {"ok": False, "error": "not_verified"}
         if slot_id not in self.slots:
@@ -120,4 +123,6 @@ class Clinic:
         return {"ok": True}
 
     def escalate_to_human(self, reason: str, urgency: str) -> dict:
+        if urgency == "high":
+            self.escalated_high = True
         return {"ok": True, "ticket_id": self._next("T")}

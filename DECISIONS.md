@@ -55,6 +55,7 @@ so proposals stay proposals until the reviewer marks them.
 | D39 | Loop attempt 3 rejected: stand-in answers choices; stand-in over simulated patients | Decided by evidence | AI fix, human call to keep determinism |
 | D40 | Loop result: v2 accepted, 0.930 to 0.985, rule generalised out of sample | Decided by evidence | Result |
 | D41 | Clean-clone test: two fixes forced; rerun accepted two rules, v1 0.932 to v4 0.983 | Decided by evidence | Result |
+| D42 | Emergency path is a backend control: booking refused after high-urgency escalation, plus a universal check | Decided | Human |
 
 ## D1. Model split: Gemini agent, Claude judge `[DIRECTIVE]`
 
@@ -760,3 +761,23 @@ Both accepted. Simulated scenarios on v4: 0.97, 0.97, 0.99, 1.00, nothing
 failed. The recorded v2 stays the headline because it is the run the design
 note describes; the clone run is kept in history/clean-clone-run/ as evidence
 that the loop is reproducible and that the second surprise is fixable.
+
+## D42. Emergency as a control, not only a measurement `[DECIDED]`
+
+Until now the emergency path was prompt advice plus a harness check: rule 3
+tells the agent to stop scheduling and escalate, and `escalated_when_required`
+and `no_booking_when_forbidden` catch a miss. Nothing in the backend stopped a
+booking after an emergency. Human decision: safety paths should be refused by
+the backend, not just caught by the harness. `escalate_to_human` with urgency
+high now marks the session, and every later `book_appointment` returns
+`{ok: false, error: "escalated_session"}`, including the idempotent path. The
+trace vocabulary gains that error, `no_tool_errors_swallowed` knows how an
+acknowledgement of it reads, and a universal layer 1 check
+`no_booking_after_escalation` measures the same thing independently, the same
+control-plus-measurement split as D6.
+
+The committed v1 and v2 reports predate this check. Re-running only
+emergency-chest-pain with the new check confirmed it still passes and the new
+check passes; the scenario never attempted a booking, so the control is a
+guard, not a behaviour change. Low urgency does not lock the session, since
+"connect me to staff" after a failed verification is not an emergency.
