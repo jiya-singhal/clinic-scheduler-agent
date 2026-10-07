@@ -195,6 +195,44 @@ v1 deliberately omits read-back confirmation before booking and
 retry-on-slot_taken. Both are intentional seeds for the improvement loop: the
 Phase 2 harness should find them, and fixing them is the demonstration.
 
+## D11. Model seam `[PROPOSAL]`
+
+`Agent` takes a `model(history, system_instruction, tools_enabled) -> Content`
+callable. `gemini_model(client)` is the only real implementation. Tests inject a
+scripted fake that returns the same `types.Content` objects Gemini would, so the
+loop has exactly one code path and no mock-only branches. This is the one
+abstraction with a single production implementation; it exists because the
+brief requires loop tests and the tests cannot call Gemini.
+
+## D12. Tool cap behaviour `[PROPOSAL]`
+
+Cap is 4 executed tool calls per user turn. A call beyond the cap is not
+executed; it receives `{"ok": false, "error": "tool_budget_exhausted"}`, the
+loop flags `tool_cap_hit`, and the next model call runs with function calling
+mode NONE so the turn must end in text.
+
+## D13. Errors added beyond the brief `[PROPOSAL]`
+
+`unknown_slot` (backend, slot id does not exist), `slot_not_offered` (dispatch,
+Q3), `bad_arguments` (dispatch, model sent malformed args; returned to the model
+rather than crashing the turn), `unknown_tool`, `tool_budget_exhausted`. All are
+visible in the trace so Phase 2 can score them.
+
+## D14. Trace event vocabulary `[DECIDED]`
+
+`user`, `tool_call`, `tool_result`, `assistant`, `flag`, `state`. One JSON object
+per line, each with `ts`, `turn`, `type`. Flags so far: `slot_not_offered:<id>`,
+`unoffered_mention:<id>`, `tool_cap_hit`. A `state` snapshot closes every turn.
+
+## D15. Smoke run status `[OPEN]`
+
+No GEMINI_API_KEY exists in this environment, so the smoke scenario has not been
+run against Gemini. The scripted CLI path was exercised end to end with the fake
+model and the missing-key error path was confirmed. The real smoke transcript is
+owed as soon as a `.env` is present. Nothing in the prompt has been tuned
+against real model output yet, so expect the first real run to surface prompt
+issues; those fixes are Phase 1 work, not Phase 2.
+
 ## Reviewer questions, all DECIDED 2026-10-07
 
 - **Q1** Item 4 truncated. DECIDED: reconstruction confirmed, exact rules in D10.
@@ -212,3 +250,5 @@ Phase 2 harness should find them, and fixing them is the demonstration.
   Q2, Q3, Q5. Human added the two reasons recorded in D3 and D6 (auditable
   state via "no tool, no state change"; control versus measurement). Human
   confirmed the two deliberate v1 omissions in D10 are seeds for Phase 2.
+- 2026-10-07: AI built Phase 1 (commits e6f6429 to 7e0ee7f), one concern each,
+  18 tests. AI added D11 to D15 during the build; D11 to D13 await review.
