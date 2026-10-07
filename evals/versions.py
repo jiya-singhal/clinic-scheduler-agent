@@ -40,9 +40,10 @@ def apply_rule(parent_path: Path, rule: dict, today: date | None = None) -> tupl
     """Writes prompts/v<n+1>.md and returns (path, rule with rule_id assigned). Never edits existing text."""
     parent_text = parent_path.read_text().strip()
     rule = {**rule, "rule_id": next_rule_id(parent_text)}
-    new_path = parent_path.with_name(f"v{version_number(parent_path) + 1}.md")
-    if new_path.exists():
-        raise FileExistsError(f"{new_path} already exists; versions are never overwritten")
+    n = version_number(parent_path) + 1
+    while parent_path.with_name(f"v{n}.md").exists():  # versions are never overwritten; a clone already has the recorded v2
+        n += 1
+    new_path = parent_path.with_name(f"v{n}.md")
     stamp = (f"<!-- {rule['rule_id']} | target: {rule['target_check']} | sources: {', '.join(rule['source_scenarios'])} | "
              f"{(today or date.today()).isoformat()} | parent sha256 {sha(parent_text)[:12]} -->")
     body = parent_text if RULES_HEADER in parent_text else f"{parent_text}\n\n{RULES_HEADER}"

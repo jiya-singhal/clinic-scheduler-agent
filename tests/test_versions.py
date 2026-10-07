@@ -21,8 +21,8 @@ def test_apply_rule_appends_section_with_provenance_and_never_edits_parent(tmp_p
     assert v1.read_text() == "You are the assistant.\nRule 1.\n"
     v3, rule3 = V.apply_rule(v2, {**RULE, "target_check": "offered_within", "source_scenarios": ["c"]}, today=date(2026, 10, 7))
     assert rule3["rule_id"] == "R-2" and v3.read_text().count("## Learned rules") == 1 and "<!-- R-1" in v3.read_text()
-    with pytest.raises(FileExistsError):
-        V.apply_rule(v1, RULE)
+    v4, rule4 = V.apply_rule(v1, RULE, today=date(2026, 10, 7))  # v2 and v3 exist: next free number, never overwrite
+    assert v4.name == "v4.md" and rule4["rule_id"] == "R-1" and "<!-- R-2" not in v4.read_text()
 
 
 def test_version_number_and_sha_and_history(tmp_path):
