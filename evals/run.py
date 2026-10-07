@@ -154,7 +154,11 @@ def evaluate(prompt_path: Path, out_path: Path, *, client, judge_fn, modes=("scr
                 any(r["mode"] == m for r in cached["scenarios"]) or m == "simulated" for m in modes):
             print(f"reusing {out_path} (same prompt hash, traces present)")
             return cached
-        print(f"not reusing {out_path}: " + ("prompt changed" if cached["prompt_sha256"] != hashlib.sha256(prompt_text.encode()).hexdigest() else "traces missing"))
+        if cached["prompt_sha256"] != hashlib.sha256(prompt_text.encode()).hexdigest():
+            print(f"{out_path} is for a different prompt; evaluating {prompt_path.name}")
+        else:
+            n = sum(1 for r in cached["scenarios"] if r["mode"] in modes)
+            print(f"{out_path} found but its traces are not in this checkout; re-evaluating {prompt_path.stem} (about {max(1, round(n * 0.8))} minutes)")
     results = []
     for sc in load_scenarios(only):
         if sc["mode"] not in modes:
