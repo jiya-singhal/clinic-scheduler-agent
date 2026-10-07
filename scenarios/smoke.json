@@ -1,0 +1,10 @@
+{
+  "name": "smoke",
+  "description": "Happy path: verify, ask for a slot this week, pick one, book.",
+  "turns": [
+    "Hi, I'd like to book an appointment.",
+    "Maria Gonzalez, date of birth March 14th 1985.",
+    "A routine checkup. Any time Tuesday morning works, either doctor.",
+    "The first one is fine, please book it."
+  ]
+}
