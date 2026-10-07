@@ -447,3 +447,41 @@ sha256, and the timestamp. Nothing is cached between versions.
 - **Q10** D23.1, time window on get_available_slots. Alternative was raising the
   slot cap. Time window chosen.
 - **Q11** D21, simulated scenarios excluded from the headline mean. Confirm.
+
+## D26. What the first baseline run taught the harness `[DECIDED, by evidence]`
+
+First full run (mean 0.907, 10 of 12 passing) was re-run after three fixes,
+all to the harness, none to the agent:
+
+1. The judge schema used `minimum`/`maximum` on a number. The structured
+   outputs API rejects those, so the bound is enforced in code instead.
+2. The `take_slot` fault fired once, on the first get_available_slots. The agent
+   fetches the whole current week right after verification, before the patient
+   has said when, so the fault took a Monday slot nobody wanted and the race
+   never happened. The fault now stays armed on every fetch until the agent
+   actually receives slot_taken once, then stands down so the recovery fetch is
+   left alone.
+3. `confirm_before_book` rejected "today at 9:30 AM with Dr. Lee. Shall I book
+   that?" for lacking a date. "today" and "tomorrow" now count when they match
+   the slot's date against the seed's today.
+
+Also changed: `booking_count` evidence now says which bookings were later
+cancelled and the net active count, because the judge read "2 bookings,
+expected 1" as two live appointments when one had been cancelled, and marked
+the agent's honest "cancelled your earlier booking" as misleading.
+
+## D27. Surprise found by the eval, not seeded `[PROPOSAL for Phase 3]`
+
+Eager availability fetch: after verify_patient succeeds the agent immediately
+calls get_available_slots for the current week and offers slots before the
+patient has stated a day, time, or reason. Seen in ambiguous-date,
+change-of-mind-mid-confirm, slot-taken-race and rambling-patient. Effects: it
+fails `offered_within` on ambiguous-date even though the "next Tuesday
+afternoon" resolution itself was correct (2026-10-20, time_from 13:00), it
+costs a tool call and a voice turn, and the judge marks the unrequested slots
+as a clarity problem. This is a prompt gap (nothing says "ask when before
+searching"), a candidate for the Phase 3 loop alongside the two seeded ones.
+
+A judgment call recorded for the design note: `offered_within` was kept strict
+rather than relaxed to "the final fetch", because offering unrequested slots on
+a voice channel is a real defect the check happened to catch.
