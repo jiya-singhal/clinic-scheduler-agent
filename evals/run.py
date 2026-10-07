@@ -29,16 +29,19 @@ def load_scenarios(only: str | None = None) -> list[dict]:
 
 
 def make_fault_hook(clinic: Clinic, faults: list[dict], agent_ref: list):
-    fired = set()
+    """take_slot stays armed, taking the first slot of every fetch, until the agent actually hits slot_taken once.
+    The agent may fetch before the patient has said when (it does), so firing once on the first fetch misses the race."""
+    disarmed = set()
 
     def hook(name, args, result):
         for i, f in enumerate(faults):
-            if i in fired or f["after_tool"] != name:
+            if i in disarmed:
                 continue
-            if f["action"] == "take_slot" and result.get("slots"):
+            if f["action"] == "take_slot" and name == "book_appointment" and result.get("error") == "slot_taken":
+                disarmed.add(i)
+            elif f["action"] == "take_slot" and name == f["after_tool"] and result.get("slots"):
                 sid = result["slots"][0]["slot_id"] if f.get("which", "first_offered") == "first_offered" else f["which"]
                 clinic.taken[sid] = "FAULT"
-                fired.add(i)
                 agent_ref[0].log("fault", action="take_slot", slot_id=sid)
     return hook
 
