@@ -16,6 +16,9 @@ from evals import judge as J
 from evals.checks import run_checks
 from evals.score import aggregate, score_scenario
 from evals.simulate import DONE, gemini_patient
+from evals import versions as V
+from evals.gate import gate
+from evals.improver import propose
 
 SCENARIOS_DIR = Path("scenarios")
 
@@ -99,23 +102,21 @@ def write_markdown(report: dict, path: Path) -> None:
     path.write_text("\n".join(L) + "\n")
 
 
-def main(argv=None):
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--prompt", type=Path, required=True)
-    ap.add_argument("--out", type=Path, required=True)
-    ap.add_argument("--only")
-    ap.add_argument("--no-judge", action="store_true")
-    args = ap.parse_args(argv)
-    load_env()
-    from google import genai
-    if not os.environ.get("GEMINI_API_KEY") or (not args.no_judge and not os.environ.get("ANTHROPIC_API_KEY")):
-        sys.exit("GEMINI_API_KEY and ANTHROPIC_API_KEY must be set in .env (ANTHROPIC optional with --no-judge)")
-    client = genai.Client()
-    prompt_text = args.prompt.read_text().strip()
-    version = args.out.stem
-    judge_fn = None if args.no_judge else J.judge
+
+def evaluate(prompt_path: Path, out_path: Path, *, client, judge_fn, modes=("scripted", "simulated"), only=None, reuse=False) -> dict:
+    """Runs every scenario in `modes` against the prompt and writes <out>.json and <out>.md. Returns the report."""
+    prompt_text = prompt_path.read_text().strip()
+    version = out_path.stem
+    if reuse and out_path.exists():
+        cached = json.loads(out_path.read_text())
+        if cached["prompt_sha256"] == hashlib.sha256(prompt_text.encode()).hexdigest() and all(
+                any(r["mode"] == m for r in cached["scenarios"]) or m == "simulated" for m in modes):
+            print(f"reusing {out_path} (same prompt hash)")
+            return cached
     results = []
-    for sc in load_scenarios(args.only):
+    for sc in load_scenarios(only):
+        if sc["mode"] not in modes:
+            continue
         runs = 2 if sc["mode"] == "simulated" else 1
         for i in range(1, runs + 1):
             rid = sc["id"] if runs == 1 else f"{sc['id']}-run{i}"
@@ -125,13 +126,108 @@ def main(argv=None):
             r["id"] = rid
             print(f"score {r['score']} failed={r['failed_checks']} gates={r['gate_failed']}")
             results.append(r)
-    report = {"version": version, "prompt_path": str(args.prompt), "prompt_sha256": hashlib.sha256(prompt_text.encode()).hexdigest(),
-              "models": {"agent": AGENT_MODEL, "judge": None if args.no_judge else J.JUDGE_MODEL, "simulator": AGENT_MODEL},
+    report = {"version": version, "prompt_path": str(prompt_path), "prompt_sha256": hashlib.sha256(prompt_text.encode()).hexdigest(),
+              "models": {"agent": AGENT_MODEL, "judge": None if judge_fn is None else J.JUDGE_MODEL, "simulator": AGENT_MODEL},
               "generated_at": datetime.now().isoformat(timespec="seconds"), "scenarios": results, "overall": aggregate(results)}
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(report, indent=1) + "\n")
-    write_markdown(report, args.out.with_suffix(".md"))
-    print(f"\nmean {report['overall']['mean_score']}  pass {report['overall']['pass_count']}/{report['overall']['scenario_count']}  -> {args.out}, {args.out.with_suffix('.md')}")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(report, indent=1) + "\n")
+    write_markdown(report, out_path.with_suffix(".md"))
+    print(f"\nmean {report['overall']['mean_score']}  pass {report['overall']['pass_count']}/{report['overall']['scenario_count']}  -> {out_path}, {out_path.with_suffix('.md')}")
+    return report
+
+
+def load_traces(report: dict) -> dict[str, list[dict]]:
+    return {r["id"]: [json.loads(l) for l in Path(r["trace"]).read_text().splitlines()] for r in report["scenarios"]}
+
+
+def _score_table(g: dict) -> list[str]:
+    L = ["| scenario | before | after | delta |", "|---|---|---|---|"]
+    L += [f"| {p['id']} | {p['before']:.3f} | {p['after']:.3f} | {p['delta']:+.3f} |" for p in g["per_scenario"]]
+    return L
+
+
+def run_loop(start: Path, max_iterations: int, *, evaluate_fn, propose_fn, auto_apply: bool, history_dir: Path = Path("history"),
+             reports_dir: Path = Path("reports"), ask=input) -> dict:
+    """evaluate -> propose one rule -> apply as v<n+1> -> re-evaluate scripted -> gate -> accept or stop.
+    evaluate_fn(prompt_path, out_path, modes, reuse) -> report. propose_fn(prompt_text, report, out_json_path) -> rule."""
+    history_dir.mkdir(exist_ok=True)
+    md = [f"# Improvement loop, started {datetime.now().isoformat(timespec='seconds')}", "", f"Start prompt `{start}`, max {max_iterations} iterations.", ""]
+    current = start
+    report = evaluate_fn(current, reports_dir / f"{current.stem}.json", ("scripted",), True)
+    summary = {"start": str(start), "iterations": [], "final": str(current)}
+    for it in range(1, max_iterations + 1):
+        fails = {k: v for k, v in report["overall"]["failures_by_check"].items() if not k.startswith("judge:")}
+        md += [f"## Iteration {it}: {current.stem}", ""]
+        if not fails:
+            md += ["No failed layer-1 checks remain. Loop ends.", ""]
+            break
+        try:
+            rule = propose_fn(current.read_text().strip(), report, reports_dir / f"{current.stem}.json")
+        except ValueError as e:
+            md += [f"Improver stopped: {e}", ""]
+            break
+        print(f"\n[iteration {it}] target {rule['target_check']} ({len(rule['source_scenarios'])} scenarios)\nproposed rule:\n  {rule['rule_text']}\nrationale: {rule['rationale']}\nrisk: {rule['risk']}")
+        if not auto_apply and ask("apply this rule? [y/n] ").strip().lower() != "y":
+            md += [f"Target `{rule['target_check']}`. Proposed rule declined by human. Loop ends.", "", f"> {rule['rule_text']}", ""]
+            break
+        new_path, rule = V.apply_rule(current, rule)
+        new_report = evaluate_fn(new_path, reports_dir / f"{new_path.stem}.json", ("scripted",), False)
+        g = gate(report, new_report, rule["target_check"])
+        verdict = "accepted" if g["accepted"] else "rejected"
+        print(f"[iteration {it}] gate: {verdict}" + ("" if g["accepted"] else "\n  " + "\n  ".join(g["reasons"])))
+        entry = {"version": new_path.stem, "path": str(new_path), "sha256": V.sha(new_path.read_text()), "parent": current.stem,
+                 "parent_sha256": V.sha(current.read_text()), "rule": rule, "verdict": verdict, "gate": g,
+                 "scores": {"before_mean": g["mean_before"], "after_mean": g["mean_after"], "target_pass_before": g["target_pass_before"], "target_pass_after": g["target_pass_after"]}}
+        V.record(entry, history_dir / "versions.json")
+        summary["iterations"].append(entry)
+        md += [f"**Target check:** `{rule['target_check']}` on {', '.join(rule['source_scenarios'])}", "",
+               f"**Rule {rule['rule_id']}:** {rule['rule_text']}", "", f"*Rationale:* {rule['rationale']}  ", f"*Risk:* {rule['risk']}", "",
+               f"**{current.stem} -> {new_path.stem}**: mean {g['mean_before']} -> {g['mean_after']}, {rule['target_check']} passing {g['target_pass_before']} -> {g['target_pass_after']}", ""]
+        md += _score_table(g) + ["", f"**Gate: {verdict.upper()}**" + ("" if g["accepted"] else " because:"), ""]
+        md += [f"- {r}" for r in g["reasons"]] + [""]
+        if not g["accepted"]:
+            (history_dir / f"reject-{new_path.stem}.json").write_text(json.dumps(entry, indent=1) + "\n")
+            md += [f"Version {new_path.stem} discarded (kept on disk for the record, not used as a parent). Loop stops; retrying with a different rule is future work.", ""]
+            break
+        current, report = new_path, new_report
+    summary["final"] = str(current)
+    md += ["## Final accepted prompt", "", f"`{current}` sha256 `{V.sha(current.read_text())[:12]}`", "", "```", current.read_text().strip(), "```", ""]
+    (history_dir / "loop.md").write_text("\n".join(md))
+    summary["loop_md"] = str(history_dir / "loop.md")
+    return summary
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--prompt", type=Path)
+    ap.add_argument("--out", type=Path)
+    ap.add_argument("--only")
+    ap.add_argument("--no-judge", action="store_true")
+    ap.add_argument("--loop", action="store_true")
+    ap.add_argument("--start", type=Path, default=Path("prompts/v1.md"))
+    ap.add_argument("--max-iterations", type=int, default=3)
+    ap.add_argument("--auto-apply", action="store_true")
+    args = ap.parse_args(argv)
+    load_env()
+    from google import genai
+    if not os.environ.get("GEMINI_API_KEY") or (not args.no_judge and not os.environ.get("ANTHROPIC_API_KEY")):
+        sys.exit("GEMINI_API_KEY and ANTHROPIC_API_KEY must be set in .env (ANTHROPIC optional with --no-judge)")
+    client = genai.Client()
+    judge_fn = None if args.no_judge else J.judge
+    if args.loop:
+        def evaluate_fn(prompt_path, out_path, modes, reuse):
+            return evaluate(prompt_path, out_path, client=client, judge_fn=judge_fn, modes=modes, reuse=reuse)
+        def propose_fn(prompt_text, report, _out):
+            return propose(prompt_text, report, load_traces(report))
+        summary = run_loop(args.start, args.max_iterations, evaluate_fn=evaluate_fn, propose_fn=propose_fn, auto_apply=args.auto_apply)
+        final = Path(summary["final"])
+        print(f"\nfinal accepted prompt: {final}. Running simulated scenarios on it (informative) ...")
+        evaluate(final, Path("reports") / f"{final.stem}-simulated.json", client=client, judge_fn=judge_fn, modes=("simulated",))
+        print(f"loop record: {summary['loop_md']}")
+        return
+    if not (args.prompt and args.out):
+        sys.exit("--prompt and --out are required without --loop")
+    evaluate(args.prompt, args.out, client=client, judge_fn=judge_fn, only=args.only)
 
 
 if __name__ == "__main__":
