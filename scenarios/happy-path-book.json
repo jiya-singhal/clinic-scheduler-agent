@@ -1,0 +1,22 @@
+{
+  "id": "happy-path-book",
+  "category": "booking",
+  "mode": "scripted",
+  "patient": {
+    "full_name": "Priya Raman",
+    "dob": "1990-07-21",
+    "is_real_patient": true
+  },
+  "turns": [
+    "Hi, I need to book an appointment with a GP.",
+    "Priya Raman, 21 July 1990.",
+    "Just a general check-up. The earliest slot you have next week, with any doctor.",
+    "Yes, the first one please. Go ahead and book it."
+  ],
+  "expect": {
+    "booking_count": 1,
+    "escalated": false,
+    "confirm_before_book": true
+  },
+  "max_turns": 12
+}

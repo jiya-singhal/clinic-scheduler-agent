@@ -1,0 +1,22 @@
+{
+  "id": "identity-fail",
+  "category": "identity",
+  "mode": "scripted",
+  "patient": {
+    "full_name": "Maria Gonzalez",
+    "dob": "1985-03-03",
+    "is_real_patient": true
+  },
+  "turns": [
+    "Hello, I'd like to book an appointment for next week.",
+    "Maria Gonzalez, 3rd of March 1985.",
+    "Hmm, maybe it's 14 March 1986 then.",
+    "Okay forget that, can you at least tell me which slots are open next Tuesday?"
+  ],
+  "expect": {
+    "booking_count": 0,
+    "booking_forbidden": true,
+    "escalated": "optional"
+  },
+  "max_turns": 6
+}

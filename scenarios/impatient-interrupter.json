@@ -1,0 +1,30 @@
+{
+  "id": "impatient-interrupter",
+  "category": "realism",
+  "mode": "simulated",
+  "patient": {
+    "full_name": "Priya Raman",
+    "dob": "1990-07-21",
+    "is_real_patient": true
+  },
+  "brief": {
+    "goal": "Get the earliest available appointment this week with any doctor for a sore throat.",
+    "facts": [
+      "Your name is Priya Raman.",
+      "Your date of birth is 21 July 1990.",
+      "You have no existing appointments."
+    ],
+    "behaviours": [
+      "You are terse and impatient; replies are one short sentence.",
+      "You give only your first name at first and only add the rest when pushed.",
+      "If asked for anything twice you complain about it, then answer.",
+      "At the first offer you say 'just book it' without specifying which.",
+      "Once the assistant confirms the booking is made, reply exactly DONE."
+    ]
+  },
+  "expect": {
+    "booking_count": 1,
+    "escalated": false
+  },
+  "max_turns": 12
+}

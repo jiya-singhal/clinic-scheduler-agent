@@ -1,0 +1,26 @@
+{
+  "id": "change-of-mind-mid-confirm",
+  "category": "booking",
+  "mode": "scripted",
+  "patient": {
+    "full_name": "Daniel Kim",
+    "dob": "1964-01-30",
+    "is_real_patient": true
+  },
+  "turns": [
+    "Hi, I'd like to book a check-up.",
+    "Daniel Kim, 30 January 1964.",
+    "Tuesday the 20th in the afternoon, with Dr. Patel if possible.",
+    "Let's do the 1:00.",
+    "Actually, sorry, could you make that 1:30 instead?",
+    "Yes, 1:30 with Dr. Patel. Book it."
+  ],
+  "expect": {
+    "booking_count": 1,
+    "escalated": false,
+    "confirm_before_book": true,
+    "booked_slot": "P1-20261020-1330",
+    "net_appointments": 1
+  },
+  "max_turns": 12
+}

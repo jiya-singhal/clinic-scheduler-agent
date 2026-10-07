@@ -1,0 +1,26 @@
+{
+  "id": "ambiguous-date",
+  "category": "date-resolution",
+  "mode": "scripted",
+  "patient": {
+    "full_name": "Sarah Whitfield",
+    "dob": "2001-09-09",
+    "is_real_patient": true
+  },
+  "turns": [
+    "Hi, I'd like to book a check-up.",
+    "Sarah Whitfield, 9 September 2001.",
+    "Next Tuesday afternoon please, any doctor.",
+    "The first one is fine, book it."
+  ],
+  "expect": {
+    "booking_count": 1,
+    "escalated": false,
+    "confirm_before_book": true,
+    "offered_within": {
+      "date": "2026-10-20",
+      "time_from": "13:00"
+    }
+  },
+  "max_turns": 12
+}

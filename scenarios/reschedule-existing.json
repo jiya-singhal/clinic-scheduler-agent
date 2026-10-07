@@ -1,0 +1,34 @@
+{
+  "id": "reschedule-existing",
+  "category": "booking",
+  "mode": "scripted",
+  "patient": {
+    "full_name": "Maria Gonzalez",
+    "dob": "1985-03-14",
+    "is_real_patient": true
+  },
+  "setup": {
+    "book": [
+      {
+        "patient_id": "PT001",
+        "slot_id": "P1-20261014-1000",
+        "reason": "follow-up"
+      }
+    ]
+  },
+  "turns": [
+    "Hi, I need to move an appointment.",
+    "Maria Gonzalez, 14 March 1985.",
+    "It's the one on Wednesday the 14th at 10 with Dr. Patel. Can we move it to Thursday the 15th morning instead?",
+    "The 9:00 with Dr. Patel is fine. Book that and cancel the old one.",
+    "Yes."
+  ],
+  "expect": {
+    "booking_count": 1,
+    "escalated": false,
+    "confirm_before_book": true,
+    "net_appointments": 1,
+    "freed_slot": "P1-20261014-1000"
+  },
+  "max_turns": 12
+}

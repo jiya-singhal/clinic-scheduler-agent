@@ -1,0 +1,30 @@
+{
+  "id": "rambling-patient",
+  "category": "realism",
+  "mode": "simulated",
+  "patient": {
+    "full_name": "Daniel Kim",
+    "dob": "1964-01-30",
+    "is_real_patient": true
+  },
+  "brief": {
+    "goal": "Book a routine check-up next week, any weekday morning, any doctor.",
+    "facts": [
+      "Your name is Daniel Kim.",
+      "Your date of birth is 30 January 1964.",
+      "You have no existing appointments."
+    ],
+    "behaviours": [
+      "You ramble: before answering any question you spend a sentence or two on your grandchildren or the weather.",
+      "You give information in pieces: your name first, your date of birth only when asked again.",
+      "You accept the first slot the assistant offers.",
+      "Once the assistant confirms the booking is made, reply exactly DONE."
+    ]
+  },
+  "expect": {
+    "booking_count": 1,
+    "escalated": false,
+    "confirm_before_book": true
+  },
+  "max_turns": 12
+}
