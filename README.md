@@ -1,6 +1,6 @@
 # Clinic scheduling agent with a self-improving eval loop
 
-A voice-style patient appointment scheduling agent (Gemini, native function calling, typed state outside the model, enforcement in the tools) plus an evaluation harness that scores 14 scenarios with programmatic trace checks and a cross-family LLM judge, then closes the loop: it turns the most common failure into one structured prompt rule, re-runs every scripted scenario, and accepts the new prompt only if a five-condition regression gate passes. **Result: v1 0.930 -> v2 0.985, 12 of 12 scripted scenarios passing, and the learned rule also fixed an unseen simulated scenario it was never shown.**
+A voice-style patient appointment scheduling agent (Gemini, native function calling, typed state outside the model, enforcement in the tools) plus an evaluation harness that scores 14 scenarios with programmatic trace checks and a cross-family LLM judge, then closes the loop: it turns the most common failure into one structured prompt rule, re-runs every scripted scenario, and accepts the new prompt only if a five-condition regression gate passes. **Result: v1 0.930 -> v2 0.985, 12 of 12 scripted scenarios passing, and the learned rule also fixed an unseen simulated scenario it was never shown.** The clean-clone test re-ran the loop from scratch and accepted two rules, v1 0.932 -> v3 0.979 -> v4 0.983, the second one fixing the eager availability fetch; that run is in `history/clean-clone-run/`.
 
 ## Setup
 
@@ -70,7 +70,7 @@ evals/        checks.py, judge.py, score.py, simulate.py, improver.py, versions.
 scenarios/    14 scenario files (12 scripted, 2 simulated) plus smoke.json
 prompts/      v1.md (hand-written), v2.md (v1 + learned rule R-1)        committed: evidence
 reports/      v1.json/.md, v2.json/.md, v2-simulated.json/.md           committed: evidence
-history/      loop.md, versions.json, attempt-1..3/ (rejected runs)     committed: evidence
+history/      loop.md, versions.json, attempt-1..3/ (rejected runs), clean-clone-run/   committed: evidence
 data/         seed.json (2 providers, 5 patients, 10 business days, fixed today 2026-10-12)
 tests/        61 pytest tests, all offline (fake model, fake judge)
 runs/         JSONL traces, gitignored
@@ -84,7 +84,7 @@ Estimated from call counts, not from billing. One full eval of 12 scripted scena
 
 ## Known limits and future work
 
-- The agent fetches availability for the whole current week right after verification, before the patient says when. v2 happened to pass the check that catches this; no learned rule targets it and it should be expected to reappear.
+- The agent fetches availability for the whole current week right after verification, before the patient says when. v2 happened to pass the check that catches this, so the recorded run never targeted it. The clean-clone rerun did target it in iteration 2 and accepted rule R-2 (`history/clean-clone-run/prompts/v4.md`), but v2 remains the recorded prompt.
 - On a rejected version the loop stops. Retrying with a different rule, or targeting two checks in one iteration, is not implemented.
 - Offering two doctors at the same time ("1:00 PM with either Dr. Patel or Dr. Lee") makes "the first one" ambiguous for voice. The judge flags it; no layer 1 check measures it, so the improver cannot target it.
 - Temperature 0 is not determinism. The same v1 prompt scored 0.918, 0.930, 0.933 and 0.939 across four runs. The gate therefore reads check results and traces, not only scores.

@@ -54,6 +54,7 @@ so proposals stay proposals until the reviewer marks them.
 | D38 | Loop attempt 2 rejected: fault must fire at booking time | Decided by evidence | AI fix |
 | D39 | Loop attempt 3 rejected: stand-in answers choices; stand-in over simulated patients | Decided by evidence | AI fix, human call to keep determinism |
 | D40 | Loop result: v2 accepted, 0.930 to 0.985, rule generalised out of sample | Decided by evidence | Result |
+| D41 | Clean-clone test: two fixes forced; rerun accepted two rules, v1 0.932 to v4 0.983 | Decided by evidence | Result |
 
 ## D1. Model split: Gemini agent, Claude judge `[DIRECTIVE]`
 
@@ -742,3 +743,20 @@ per full loop run, 4 loop runs plus 2 Phase 2 runs, roughly 130 scenario
 runs in Phase 3 and 32 in Phase 2. Each scenario run is about 5 Gemini calls
 at under a cent and one Opus judge call at 2 to 3 cents. Total for the
 project is in the 6 to 8 dollar range, with the judge as the larger share.
+
+## D41. Clean-clone test `[DECIDED, by evidence]`
+
+Fresh clone, `uv sync`, `.env` from the example, both headline commands. Two
+fixes were forced, one commit each: (1) the loop reused the committed v1
+report whose traces live in gitignored runs/, so a clone crashed on a missing
+trace; a report is now reused only when its traces exist. (2) a new version
+failed because the committed prompts/v2.md already existed; a new version now
+takes the next free number, so versions are still never overwritten.
+
+The rerun from the clone then went two iterations: v1 0.932 (10 of 12) ->
+v3 0.979 (R-1, read-back) -> v4 0.983 (R-2, ask for the day and time window
+before offering slots, targeting offered_within, the eager fetch from D27).
+Both accepted. Simulated scenarios on v4: 0.97, 0.97, 0.99, 1.00, nothing
+failed. The recorded v2 stays the headline because it is the run the design
+note describes; the clone run is kept in history/clean-clone-run/ as evidence
+that the loop is reproducible and that the second surprise is fixable.
