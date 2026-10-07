@@ -51,6 +51,8 @@ def main(argv=None) -> None:
             user = input("\npatient> ").strip()
         except EOFError:
             break
+        if not sys.stdin.isatty():
+            print(user)  # piped input: echo the patient line so the transcript reads like an interactive one
         if user in {"quit", "exit"}:
             break
         if user:
