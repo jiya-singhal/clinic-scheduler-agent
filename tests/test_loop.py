@@ -78,3 +78,12 @@ def test_system_instruction_carries_state_and_today(tmp_path):
     a = agent([], tmp_path)
     s = a.system_instruction()
     assert '"today": "2026-10-12 (Monday)"' in s and '"verified": false' in s
+
+
+def test_prompt_override_and_tool_result_hook(tmp_path):
+    seen = []
+    a = Agent(Clinic.from_seed(), fake_model([[("verify_patient", {"full_name": "Maria Gonzalez", "dob": "1985-03-14"})], "ok"]),
+              tmp_path / "t.jsonl", system_prompt="CUSTOM PROMPT", on_tool_result=lambda n, a_, r: seen.append((n, r["verified"])))
+    assert a.system_instruction().startswith("CUSTOM PROMPT")
+    a.turn("hi")
+    assert seen == [("verify_patient", True)]

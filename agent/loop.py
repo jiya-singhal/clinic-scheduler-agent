@@ -19,17 +19,7 @@ MAX_TOOL_CALLS = 4
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")  # 2.5-flash is retired for new keys, see D16
 SLOT_ID_RE = re.compile(r"\bP\d-\d{8}-\d{4}\b")
 
-SYSTEM_PROMPT = """You are the appointment scheduling assistant for a small primary-care clinic, speaking with a patient by voice.
-Keep every reply short and natural, one or two sentences, no lists or markdown.
-
-Rules:
-1. Identify and verify the patient (full name and date of birth) with verify_patient before giving or changing any appointment information. If verification fails, ask them to repeat their details once; after a second failure, offer to escalate.
-2. Never give medical advice of any kind.
-3. If the patient describes an emergency (chest pain, trouble breathing, stroke signs, suicidal thoughts), stop scheduling, tell them to call emergency services right now, and call escalate_to_human with urgency high.
-4. Stay in scope: booking, rescheduling, cancelling appointments. Anything else, politely decline or escalate.
-5. Only offer slots that get_available_slots returned in this conversation. Refer to a slot by provider and time, and pass its exact slot_id when booking.
-
-The CURRENT STATE block below is authoritative. It is updated only from tool results, never from what either of us says."""
+DEFAULT_PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "v1.md"
 
 # Signature of the model seam: (history, system_instruction, tools_enabled) -> types.Content (the model turn).
 ModelFn = Callable[[list[types.Content], str, bool], types.Content]
@@ -54,8 +44,11 @@ def gemini_model(client, model: str = MODEL) -> ModelFn:
 
 
 class Agent:
-    def __init__(self, clinic: Clinic, model: ModelFn, trace_path: Path | None = None):
+    def __init__(self, clinic: Clinic, model: ModelFn, trace_path: Path | None = None,
+                 system_prompt: str | None = None, on_tool_result: Callable[[str, dict, dict], None] | None = None):
         self.clinic, self.model = clinic, model
+        self.system_prompt = system_prompt if system_prompt is not None else DEFAULT_PROMPT_PATH.read_text().strip()
+        self.on_tool_result = on_tool_result
         self.state = ConversationState()
         self.history: list[types.Content] = []
         if trace_path is None:
@@ -75,7 +68,7 @@ class Agent:
     def system_instruction(self) -> str:
         state = json.loads(self.state.to_json())
         state["today"] = f"{self.clinic.today.isoformat()} ({self.clinic.today:%A})"
-        return f"{SYSTEM_PROMPT}\n\nCURRENT STATE:\n{json.dumps(state, indent=1)}"
+        return f"{self.system_prompt}\n\nCURRENT STATE:\n{json.dumps(state, indent=1)}"
 
     def turn(self, user_text: str) -> str:
         self.state.turn_count += 1
@@ -100,6 +93,8 @@ class Agent:
                     apply(self.state, fc.name, args, result)
                     if result.get("error") == "slot_not_offered":
                         self.flag(f"slot_not_offered:{args.get('slot_id')}")
+                    if self.on_tool_result:
+                        self.on_tool_result(fc.name, args, result)
                 calls_made += 1
                 self.log("tool_result", name=fc.name, result=result)
                 parts.append(types.Part.from_function_response(name=fc.name, response=result))
