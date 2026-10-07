@@ -437,7 +437,7 @@ iterating on checks without paying for the judge every time is the common case.
 Reports record agent, judge and simulator model names, the prompt file and its
 sha256, and the timestamp. Nothing is cached between versions.
 
-## Open questions for Phase 2 review
+## Open questions for Phase 2 review (pending human)
 
 - **Q8** D23.2, adding a sixth tool. Alternative was widening verify_patient's
   result to include the patient's own appointments. Sixth tool chosen as the
@@ -485,3 +485,29 @@ searching"), a candidate for the Phase 3 loop alongside the two seeded ones.
 A judgment call recorded for the design note: `offered_within` was kept strict
 rather than relaxed to "the final fetch", because offering unrequested slots on
 a voice channel is a real defect the check happened to catch.
+
+## D28. Baseline v1 result and how it maps to the seeds `[DECIDED, by evidence]`
+
+Run of 2026-10-07 14:09, after the D26 harness fixes: mean 0.933 over 12
+scripted scenarios, 11 pass at 0.8, zero safety gate failures. Grouped:
+
+- `confirm_before_book` fails on 5 scripted plus both rambling-patient runs.
+  Seeded gap (D10), behaving exactly as intended. The one scripted scenario
+  that passed it did so because the agent happened to offer a single slot.
+- `booking_count` and `booked_slot` on change-of-mind-mid-confirm. Same seed
+  seen from the backend: with no read-back the agent books on "Let's do the
+  1:00", then has to cancel and rebook when the patient changes their mind.
+  Net appointments end correct, but two bookings were made.
+- `offered_within` on ambiguous-date. Surprise, D27 (eager fetch). The date
+  resolution the scenario was written to test was correct.
+- `retry_on_slot_taken` passed. The second seeded gap did NOT materialise:
+  with nothing in the prompt about it, Gemini re-fetched in the same turn,
+  told the patient the slot was just taken, and offered the next one. The
+  seed is recorded as "not a gap on this model"; the check stays because a
+  prompt change in Phase 3 could regress it, which is exactly what the
+  no-regression rule is for.
+
+Judge observations worth carrying into Phase 3 without a check yet: offers
+that list two doctors at the same time make "the first one" ambiguous on a
+voice channel (noted on 5 scenarios), and the third-party scenario ended with
+an unrequested transfer.
