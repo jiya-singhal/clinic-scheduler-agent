@@ -437,16 +437,12 @@ iterating on checks without paying for the judge every time is the common case.
 Reports record agent, judge and simulator model names, the prompt file and its
 sha256, and the timestamp. Nothing is cached between versions.
 
-## Open questions for Phase 2 review (pending human)
+## Phase 2 questions, all DECIDED 2026-10-07
 
-- **Q8** D23.2, adding a sixth tool. Alternative was widening verify_patient's
-  result to include the patient's own appointments. Sixth tool chosen as the
-  narrower contract.
-- **Q9** D20, judge model. Opus 5.5 without temperature, or Haiku 4.5 with
-  temperature 0? Default Opus 5.5.
-- **Q10** D23.1, time window on get_available_slots. Alternative was raising the
-  slot cap. Time window chosen.
-- **Q11** D21, simulated scenarios excluded from the headline mean. Confirm.
+- **Q8** DECIDED: list_appointments accepted, read-only, scoped to the verified patient_id.
+- **Q9** DECIDED: Opus 5.5, no temperature parameter; the exact model name in the report is what reproducibility needs.
+- **Q10** DECIDED: time window accepted as built.
+- **Q11** DECIDED: headline is the 12 scripted scenarios; simulated stay as informative rows.
 
 ## D26. What the first baseline run taught the harness `[DECIDED, by evidence]`
 
@@ -511,3 +507,73 @@ Judge observations worth carrying into Phase 3 without a check yet: offers
 that list two doctors at the same time make "the first one" ambiguous on a
 voice channel (noted on 5 scenarios), and the third-party scenario ended with
 an unrequested transfer.
+
+## D29. Known gap the improver cannot target `[DECIDED]`
+
+Offering two doctors at the same time ("1:00 PM with either Dr. Patel or Dr.
+Lee") makes "the first one" ambiguous on a voice channel. The judge flagged it
+on five scenarios. No layer 1 check exists for it, so the improver, which only
+targets failed checks, cannot see it. Human decision: do not add a check now;
+record as future work in the design note.
+
+# Phase 3: closing the loop
+
+## D30. Loop module layout `[PROPOSAL]`
+
+```
+evals/gate.py        gate(prev_report, new_report, target_check) -> {accepted, reasons, per_scenario}
+evals/versions.py    next_version(parent) and apply_rule(parent_path, rule) -> new prompt path; history/versions.json
+evals/improver.py    Claude proposes one rule for the single highest-count failed check; validates the constraints
+evals/run.py         --loop --start --max-iterations [--auto-apply]; evaluate() refactored out of main()
+history/loop.md      per-iteration before/after tables, gate verdicts, final prompt
+history/versions.json, history/reject-v<n>.json on a rejected version
+```
+
+## D31. Improver contract and validation `[PROPOSAL]`
+
+Claude Opus 5.5, structured JSON output, default effort. Input: the current
+prompt, failures_by_check, and for the target check only: each failing
+scenario's transcript plus that check's evidence. Output per the brief.
+Validation in code, not trusted to the model: rule_text at most 400 chars; may
+not contain any scenario id, any check name, or the words scenario, eval, test,
+check, judge. One retry with the violations fed back; a second violation stops
+the loop with a logged reason. rule_id is assigned by versions.py as the next
+R-<n>, whatever the model proposed. Judge criteria (`judge:*` keys) are never
+targets, since the improver works on layer 1 checks only.
+
+## D32. Version files `[PROPOSAL]`
+
+prompts/v<n+1>.md = parent text + "## Learned rules" (created once) + an HTML
+comment `<!-- R-n | target: check | sources: ids | date | parent sha256 -->`
+followed by the rule text. history/versions.json is a list of
+{version, path, sha256, parent, parent_sha256, rule, verdict, scores}.
+
+## D33. Gate semantics `[DIRECTIVE]` with two fill-ins `[PROPOSAL]`
+
+The five conditions from the brief, over scripted scenarios only. Fill-ins:
+condition 1 counts scenarios where the target check is present and passed;
+condition 3 compares each scenario's set of passed check names and requires
+the old set to be a subset of the new one. Known risk: the judge is not
+deterministic, so condition 2 (no drop over 0.03) can trip on judge noise.
+The 0.4 judge weight spread over six criteria means one criterion moving 0.3
+shifts the score by 0.02, so 0.03 is tight but workable. If it trips, the loop
+stops and says so; that is the brief's rule for this phase.
+
+## D34. Baseline reuse `[PROPOSAL]`
+
+If reports/<version>.json already exists and its prompt_sha256 matches the
+prompt file, the loop reuses it instead of re-running. Saves one full run on
+the start version. Model responses are never cached; only the finished report
+for an identical prompt is.
+
+## D35. Human in the loop `[DIRECTIVE]`
+
+Default: print the proposed rule, wait for y/n, then apply and evaluate, then
+print the gate verdict. `--auto-apply` skips the wait. The demo uses
+--auto-apply; in a clinic the proposed rule goes to a human before it touches
+the live prompt, and the gate verdict would be a second human checkpoint.
+
+## D36. Out of scope this phase `[DIRECTIVE]`
+
+On a rejected version the loop stops. Retrying with a different rule, or
+targeting more than one check per iteration, is future work.
