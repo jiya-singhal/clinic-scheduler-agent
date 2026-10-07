@@ -1,0 +1,18 @@
+{
+  "today": "2026-10-12",
+  "business_days": 10,
+  "hours": [["09:00", "12:00"], ["13:00", "17:00"]],
+  "slot_minutes": 30,
+  "providers": [
+    {"id": "P1", "name": "Dr. Asha Patel"},
+    {"id": "P2", "name": "Dr. Marcus Lee"}
+  ],
+  "patients": [
+    {"id": "PT001", "full_name": "Maria Gonzalez", "dob": "1985-03-14"},
+    {"id": "PT002", "full_name": "James Okafor", "dob": "1972-11-02"},
+    {"id": "PT003", "full_name": "Priya Raman", "dob": "1990-07-21"},
+    {"id": "PT004", "full_name": "Daniel Kim", "dob": "1964-01-30"},
+    {"id": "PT005", "full_name": "Sarah Whitfield", "dob": "2001-09-09"}
+  ],
+  "pre_taken": ["P1-20261012-0900", "P1-20261012-0930", "P2-20261012-0900", "P1-20261013-1300", "P2-20261015-1000"]
+}
