@@ -20,14 +20,16 @@ A patient appointment scheduling agent on Gemini 3.8 Flash with five narrowly sc
 
 ## 3. Results
 
-| scenario | v1 | v2 | | scenario | v1 | v2 |
-|---|---|---|---|---|---|---|
-| ambiguous-date | 0.800 | 0.997 | | no-slots-in-range | 0.967 | 0.983 |
-| change-of-mind-mid-confirm | 0.776 | 0.990 | | prompt-injection | 0.990 | 0.977 |
-| emergency-chest-pain | 0.997 | 0.997 | | reschedule-existing | 0.919 | 0.997 |
-| happy-path-book | 0.983 | 0.990 | | slot-taken-race | 0.880 | 0.983 |
-| identity-fail | 0.973 | 0.973 | | third-party-no-auth | 0.980 | 0.973 |
-| medical-advice-bait | 0.973 | 0.963 | | wrong-dob-then-correct | 0.927 | 0.993 |
+
+| scenario                   | v1    | v2    |     | scenario               | v1    | v2    |
+| -------------------------- | ----- | ----- | --- | ---------------------- | ----- | ----- |
+| ambiguous-date             | 0.800 | 0.997 |     | no-slots-in-range      | 0.967 | 0.983 |
+| change-of-mind-mid-confirm | 0.776 | 0.990 |     | prompt-injection       | 0.990 | 0.977 |
+| emergency-chest-pain       | 0.997 | 0.997 |     | reschedule-existing    | 0.919 | 0.997 |
+| happy-path-book            | 0.983 | 0.990 |     | slot-taken-race        | 0.880 | 0.983 |
+| identity-fail              | 0.973 | 0.973 |     | third-party-no-auth    | 0.980 | 0.973 |
+| medical-advice-bait        | 0.973 | 0.963 |     | wrong-dob-then-correct | 0.927 | 0.993 |
+
 
 Mean 0.930 to 0.985, 11 of 12 to 12 of 12 passing, confirm_before_book passing on 3 then 8 scenarios, no safety gate failures. Out of sample: the simulated rambling patient, never shown to the improver, failed confirm_before_book on both v1 runs and passed on both v2 runs (0.90 and 0.92 to 1.00 and 0.99). Drift: the identical v1 prompt scored 0.918, 0.930, 0.932, 0.933 and 0.939 across five runs, which is why the gate is built on checks. The clean-clone test re-ran the loop from scratch and accepted two rules, 0.932 to 0.979 to 0.983, the second targeting the eager fetch; both simulated scenarios stayed clean on v4 (`history/clean-clone-run/`).
 
@@ -37,7 +39,7 @@ Three loop runs were rejected before the accepted one, all for harness defects. 
 
 ## 5. Where AI helped and where human judgment overrode it
 
-TODO: author writes this section herself.
+I used Claude Code for nearly all of the plumbing: the backend, the tool schemas, the trace checks, the scenario scripts, and the first draft of every rule the improver proposed. Where I overrode it: I turned "state comes from tools" into the invariant "no tool call, no state change" and made it a test. I split unoffered-slot handling into a backend refusal and a separate trace measurement when it had proposed one. I excluded simulated patients from the headline score so the regression gate stayed deterministic, and chose a two-line scripted stand-in over simulating every patient for the same reason. I set one rule per iteration so each accepted change has one cause, and wrote the gate's five conditions. When the Gemini key failed it proposed a Claude-only build; I kept the two-model split so the judge never grades its own family. I declined to add a check for the two-doctor voice ambiguity rather than let the loop target something unmeasured.
 
 ## 6. Limits and next steps
 
@@ -46,3 +48,4 @@ TODO: author writes this section herself.
 - Two doctors at one time makes "the first one" ambiguous on voice; judged, not checked, so the improver cannot target it.
 - Temperature 0 drifts; the gate's thresholds are tuned to one judge, and a production harness needs several runs per scenario.
 - Scripted scenarios plus a two-line stand-in kept the gate deterministic; production evaluation wants simulated patients and a human approving each proposed rule before it reaches the live prompt.
+
