@@ -10,6 +10,51 @@ Design log for the scheduling-agent take-home. Every entry is tagged:
 The brief asks us to show where AI helped and where human judgment overrode it,
 so proposals stay proposals until the reviewer marks them.
 
+## Index
+
+| id | summary | status | origin |
+|---|---|---|---|
+| D1 | Gemini agent, Claude judge, different families on purpose | Directive | Human |
+| D2 | Agent module layout (backend, tools, state, loop, chat) | Decided | AI proposal |
+| D3 | Typed state, mutates only in apply(); 'no tool call, no state change' invariant and test | Decided | AI proposal, human sharpened |
+| D4 | Tool contracts and slot id format | Decided | AI proposal |
+| D5 | Deterministic seeded backend, fixed today 2026-10-12 | Decided | AI proposal |
+| D6 | Agent loop, JSONL trace, unoffered slot: dispatch control plus text measurement | Decided | AI proposal, human split control/measurement |
+| D7 | Scripted mode file shape | Decided | AI proposal |
+| D8 | v1 deliberately omits read-back and retry on slot_taken | Directive | Human |
+| D9 | Dependencies, six-line .env parser | Decided | AI proposal |
+| D10 | System prompt scope (reconstructed truncated brief item) | Decided | AI proposal, human confirmed exact rules |
+| D11 | Model seam: one callable, fake in tests | Decided by default | AI proposal, unreviewed |
+| D12 | Tool cap: 4 calls, then forced text turn | Decided by default | AI proposal, unreviewed |
+| D13 | Extra error codes beyond the brief | Decided by default | AI proposal, unreviewed |
+| D14 | Trace event vocabulary | Decided | AI proposal |
+| D15 | Smoke run blocked on key (superseded by D16) | Superseded | Status note |
+| D16 | Agent model gemini-3.8-flash; stay on Gemini rather than Claude-only | Decided | Vendor forced, human kept two-family split |
+| D17 | Eval module layout | Decided | AI proposal |
+| D18 | Scenario file contract | Decided | AI proposal |
+| D19 | Layer 1 check heuristics | Decided | AI proposal |
+| D20 | Judge: Opus 5.5, structured output, no temperature parameter | Decided | AI proposal, human accepted (Q9) |
+| D21 | Scoring formula and gates; simulated excluded from headline | Directive plus fill-in | Human (Q11) |
+| D22 | Simulator on gemini-3.8-flash, fixed prompt | Decided | AI proposal |
+| D23 | Time window on get_available_slots; list_appointments tool | Decided | AI proposal, human accepted (Q8, Q10) |
+| D24 | Fault injection hook | Decided, revised in D26 and D38 | AI proposal |
+| D25 | Runner flags --only, --no-judge | Decided | AI proposal |
+| D26 | First baseline run: three harness fixes | Decided by evidence | AI |
+| D27 | Surprise: eager week-wide fetch after verification | Open for future work | AI finding |
+| D28 | Baseline mapping to seeds; retry gap not a gap on this model | Decided by evidence | AI finding |
+| D29 | Two-doctor ambiguity: no check now, future work | Decided | Human |
+| D30 | Loop module layout | Decided | AI proposal |
+| D31 | Improver contract and validation | Decided | AI proposal under human constraints |
+| D32 | Version files, append only, provenance comment | Decided | AI proposal under human constraints |
+| D33 | Gate: five conditions, two fill-ins | Directive plus fill-in | Human conditions, AI fill-ins |
+| D34 | Reuse an existing report when prompt hash matches | Decided | AI proposal |
+| D35 | Human in the loop by default, --auto-apply for demo | Directive | Human |
+| D36 | No retry with a different rule on rejection | Directive | Human |
+| D37 | Loop attempt 1 rejected: scripts cannot answer a new question; affirm on demand | Decided by evidence | AI fix |
+| D38 | Loop attempt 2 rejected: fault must fire at booking time | Decided by evidence | AI fix |
+| D39 | Loop attempt 3 rejected: stand-in answers choices; stand-in over simulated patients | Decided by evidence | AI fix, human call to keep determinism |
+| D40 | Loop result: v2 accepted, 0.930 to 0.985, rule generalised out of sample | Decided by evidence | Result |
+
 ## D1. Model split: Gemini agent, Claude judge `[DIRECTIVE]`
 
 Agent is Gemini 2.5 Flash (google-genai, native function calling, temperature 0).
