@@ -47,5 +47,5 @@ I used Claude Code for nearly all of the plumbing: the backend, the tool schemas
 - No retry with a different rule after a rejection; the loop stops and says so.
 - Two doctors at one time makes "the first one" ambiguous on voice; judged, not checked, so the improver cannot target it.
 - Temperature 0 drifts; the gate's thresholds are tuned to one judge, and a production harness needs several runs per scenario.
-- Scripted scenarios plus a two-line stand-in kept the gate deterministic; production evaluation wants simulated patients and a human approving each proposed rule before it reaches the live prompt.
+- Scripted scenarios plus a two-line stand-in kept the gate deterministic; production evaluation wants simulated patients, a human approving each proposed rule before it reaches the live prompt, and a per-turn latency column: traces already carry per-event timestamps, so it is a one-function report change, left out to stay inside the brief's ceiling.
 
