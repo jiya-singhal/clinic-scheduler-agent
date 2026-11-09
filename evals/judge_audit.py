@@ -24,6 +24,7 @@ from evals.run import load_scenarios
 from evals.score import score_scenario
 
 TRACES = Path("history/accepted-run-traces")
+GEMINI_JUDGE_MODEL = os.environ.get("GEMINI_JUDGE_MODEL", GEMINI_MODEL)  # judge only; the saved agent traces are what they are
 PROMPT_V2 = Path("prompts/v2.md")
 ORDERS = ("AB", "BA")  # AB: labels[0] is shown as Transcript A; BA: the same pair swapped
 RUBRIC = J.SYSTEM.split("Criteria:\n", 1)[1]  # the six criteria of the single-transcript judge, verbatim
@@ -57,11 +58,12 @@ def claude_json(system: str, user: str, schema: dict, model: str = J.JUDGE_MODEL
 _gemini_client = None
 
 
-def gemini_json(system: str, user: str, schema: dict, model: str = GEMINI_MODEL):
+def gemini_json(system: str, user: str, schema: dict, model: str = GEMINI_JUDGE_MODEL):
     global _gemini_client
     from google import genai
     from google.genai import types
-    _gemini_client = _gemini_client or genai.Client()  # kept alive: a temporary client is closed before the request
+    _gemini_client = _gemini_client or genai.Client(http_options=types.HttpOptions(  # kept alive: a temporary client is closed early
+        timeout=90_000, retry_options=types.HttpRetryOptions(attempts=4, initial_delay=2, max_delay=30, http_status_codes=[429, 500, 503, 504])))
     resp = _gemini_client.models.generate_content(model=model, contents=user, config=types.GenerateContentConfig(
         system_instruction=system, temperature=0, response_mime_type="application/json", response_json_schema=schema))
     u = resp.usage_metadata
@@ -99,7 +101,7 @@ JUDGE_ORDER = ("opus", "gemini", "compat")  # opus is the production judge and t
 
 def judge_model(judge: str) -> str:
     """Model behind a judge name. It is in every cache key, so a model change never reuses old verdicts."""
-    return {"opus": J.JUDGE_MODEL, "gemini": GEMINI_MODEL, "compat": os.environ.get("OPENAI_COMPAT_MODEL", "")}.get(judge, judge)
+    return {"opus": J.JUDGE_MODEL, "gemini": GEMINI_JUDGE_MODEL, "compat": os.environ.get("OPENAI_COMPAT_MODEL", "")}.get(judge, judge)
 
 
 class Calls(dict):
@@ -360,8 +362,9 @@ def audit(out: Path, calls: Calls, judges: dict, agent_traces) -> dict:
                "layer1": {"gemini-v1": layer1(gem["v1"], scs), "gemini-v2": layer1(gem["v2"], scs), "claude-v2": layer1(claude, scs)},
                "tokens": token_totals(calls)}
     results = {"meta": {"generated_at": datetime.now().isoformat(timespec="seconds"),
-                        "models": {"opus_judge": J.JUDGE_MODEL, "gemini_judge": GEMINI_MODEL, "compat_judge": judge_model("compat") or None,
-                                   "gemini_agent": GEMINI_MODEL, "claude_agent": ANTHROPIC_AGENT_MODEL},
+                        "models": {"opus_judge": J.JUDGE_MODEL, "gemini_judge": GEMINI_JUDGE_MODEL, "compat_judge": judge_model("compat") or None,
+                                   "gemini_agent": json.loads(Path("reports/v2.json").read_text())["models"]["agent"],  # model that made the saved traces
+                                   "claude_agent": ANTHROPIC_AGENT_MODEL},
                         "settings": {"opus": "effort low, no temperature parameter (rejected by the model)", "gemini": "temperature 0",
                                      "compat": f"temperature 0, {os.environ.get('OPENAI_COMPAT_BASE_URL', COMPAT_BASE_URL)}",
                                      "claude_agent": "temperature 0, prompts/v2.md, scripted scenarios"},
@@ -395,12 +398,14 @@ def write_report(res: dict, path: Path) -> None:
         return B.get(name)
     js = [j for j in JUDGE_ORDER if any(n.split("|")[1] == j for n in B)]
     desc = {"opus": f"Opus `{M['models']['opus_judge']}` (production judge, cross-family, effort low)",
-            "gemini": f"Gemini `{M['models']['gemini_judge']}` (same family as the agent, temperature 0)",
+            "gemini": f"Gemini `{M['models']['gemini_judge']}` (same family as the agent `{M['models']['gemini_agent']}`, temperature 0)",
             "compat": f"OpenAI-compatible `{M['models'].get('compat_judge')}` (neither family, temperature 0)"}
     L = ["# Judge audit", "",
          f"Generated {M['generated_at']} by `python -m evals.judge_audit`. Every number below is computed from `results.json` in this folder.", "",
          f"Judges: {'; '.join(desc[j] for j in js) or 'none run'}. Second answer model for the self-preference test: "
          f"`{M['models']['claude_agent']}` at temperature 0 with `prompts/v2.md`. Method after Zheng et al. 2023.", ""]
+    if "gemini" not in js:
+        L += ["The Gemini judge has no complete block in this run, so the same-family position numbers and the self-preference gap are pending.", ""]
     L += ["| model | calls | input tokens | output tokens |", "|---|---|---|---|"]
     L += [f"| {m} | {t['calls']} | {t['input_tokens']} | {t['output_tokens']} |" for m, t in S["tokens"].items()] + [""]
 
@@ -504,14 +509,14 @@ def write_report(res: dict, path: Path) -> None:
                  f"cross-family Opus judge picks Gemini {fam['opus']['picks_single_order'].get('gemini', 0)}/{n} |")
     L.append("")
 
-    L += ["## Human agreement", "", "Pending. `human_sheet.md` holds the v1 vs v2 and Gemini vs Claude pairs in a shuffled, blinded order. "
+    L += ["## Human agreement", "", "Pending. `human_sheet.md` holds H01 to H12 (v1 vs v2) and H13 onward (Gemini vs Claude), each batch shuffled, X and Y random per pair. "
           "Fill the verdict list and run `uv run python evals/judge_audit/score_human.py` for agreement and Cohen's kappa per judge configuration.", "",
           "## Limits", "",
           "- Twelve pairs per set. One flip is about 8 points; read the counts, not the percentages.",
           "- Each verdict is one call. Opus at effort low takes no temperature and Gemini at temperature 0 is not deterministic, so a rerun can move a count by one or two.",
           "- The pairwise judge sees transcripts only, not the layer 1 checks the production judge sees. That is deliberate for a bias test and makes it a harder task than production grading.",
           "- v2 transcripts are longer than v1 because of the read-back turn, so v1 vs v2 mixes a quality difference with a length difference.",
-          "- Padding is synthetic and the filler is obviously redundant. A real verbose agent is subtler, so this bounds length bias from below.",
+          "- Padding is synthetic and the filler is obviously redundant. A judge that penalises it is not fooled by blatant filler; that says nothing about subtler verbosity from a real agent.",
           "- Self-preference is confounded with quality: the two agents are different models. The judge gap on the same pairs is the comparison; it still cannot separate bias from a real family-level taste for a style.",
           "- Blinding is imperfect for a reader who knows the project: the read-back turn identifies v2.", ""]
     path.write_text("\n".join(L))
