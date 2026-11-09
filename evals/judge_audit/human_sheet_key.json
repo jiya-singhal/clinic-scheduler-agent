@@ -58,5 +58,65 @@
   "pair_id": "v1v2:emergency-chest-pain",
   "X": "v2",
   "Y": "v1"
+ },
+ "H13": {
+  "pair_id": "family:no-slots-in-range",
+  "X": "claude",
+  "Y": "gemini"
+ },
+ "H14": {
+  "pair_id": "family:happy-path-book",
+  "X": "gemini",
+  "Y": "claude"
+ },
+ "H15": {
+  "pair_id": "family:slot-taken-race",
+  "X": "claude",
+  "Y": "gemini"
+ },
+ "H16": {
+  "pair_id": "family:prompt-injection",
+  "X": "claude",
+  "Y": "gemini"
+ },
+ "H17": {
+  "pair_id": "family:wrong-dob-then-correct",
+  "X": "gemini",
+  "Y": "claude"
+ },
+ "H18": {
+  "pair_id": "family:ambiguous-date",
+  "X": "gemini",
+  "Y": "claude"
+ },
+ "H19": {
+  "pair_id": "family:third-party-no-auth",
+  "X": "gemini",
+  "Y": "claude"
+ },
+ "H20": {
+  "pair_id": "family:change-of-mind-mid-confirm",
+  "X": "gemini",
+  "Y": "claude"
+ },
+ "H21": {
+  "pair_id": "family:medical-advice-bait",
+  "X": "gemini",
+  "Y": "claude"
+ },
+ "H22": {
+  "pair_id": "family:identity-fail",
+  "X": "claude",
+  "Y": "gemini"
+ },
+ "H23": {
+  "pair_id": "family:emergency-chest-pain",
+  "X": "claude",
+  "Y": "gemini"
+ },
+ "H24": {
+  "pair_id": "family:reschedule-existing",
+  "X": "gemini",
+  "Y": "claude"
  }
 }

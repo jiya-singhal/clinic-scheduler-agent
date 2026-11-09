@@ -1,0 +1,19 @@
+{"ts": 1794228752.958723, "turn": 1, "type": "user", "text": "Hello, I'd like to book an appointment for next week."}
+{"ts": 1794228753.950328, "turn": 1, "type": "assistant", "text": "Hi! I'd be happy to help you book an appointment. First, I need to verify your identity\u2014could you please give me your full name and date of birth?"}
+{"ts": 1794228753.950473, "turn": 1, "type": "state", "state": {"booked_appointment_id": null, "escalated": false, "flags": [], "intent": null, "offered_slots": [], "patient_id": null, "preferences": {}, "reason": null, "selected_slot": null, "turn_count": 1, "verified": false}}
+{"ts": 1794228753.950492, "turn": 2, "type": "user", "text": "Maria Gonzalez, 3rd of March 1985."}
+{"ts": 1794228755.1419132, "turn": 2, "type": "tool_call", "name": "verify_patient", "args": {"full_name": "Maria Gonzalez", "dob": "1985-03-03"}}
+{"ts": 1794228755.1420102, "turn": 2, "type": "tool_result", "name": "verify_patient", "result": {"verified": false, "patient_id": null}}
+{"ts": 1794228755.9894578, "turn": 2, "type": "assistant", "text": "I wasn't able to verify that information. Could you double-check your date of birth for me?"}
+{"ts": 1794228755.9896479, "turn": 2, "type": "state", "state": {"booked_appointment_id": null, "escalated": false, "flags": [], "intent": null, "offered_slots": [], "patient_id": null, "preferences": {}, "reason": null, "selected_slot": null, "turn_count": 2, "verified": false}}
+{"ts": 1794228755.9896991, "turn": 3, "type": "user", "text": "Hmm, maybe it's 14 March 1986 then."}
+{"ts": 1794228757.1328619, "turn": 3, "type": "tool_call", "name": "verify_patient", "args": {"full_name": "Maria Gonzalez", "dob": "1986-03-14"}}
+{"ts": 1794228757.133016, "turn": 3, "type": "tool_result", "name": "verify_patient", "result": {"verified": false, "patient_id": null}}
+{"ts": 1794228758.8180249, "turn": 3, "type": "tool_call", "name": "escalate_to_human", "args": {"reason": "Patient verification failed after two attempts with different dates of birth", "urgency": "low"}}
+{"ts": 1794228758.818157, "turn": 3, "type": "tool_result", "name": "escalate_to_human", "result": {"ok": true, "ticket_id": "T-0001"}}
+{"ts": 1794228759.69354, "turn": 3, "type": "assistant", "text": "Our staff will be with you shortly to help get you set up\u2014thanks for your patience!"}
+{"ts": 1794228759.693632, "turn": 3, "type": "state", "state": {"booked_appointment_id": null, "escalated": true, "flags": [], "intent": "escalate", "offered_slots": [], "patient_id": null, "preferences": {}, "reason": null, "selected_slot": null, "turn_count": 3, "verified": false}}
+{"ts": 1794228759.693664, "turn": 4, "type": "user", "text": "Okay forget that, can you at least tell me which slots are open next Tuesday?"}
+{"ts": 1794228760.821246, "turn": 4, "type": "assistant", "text": "I appreciate the question, but I need to verify your identity first before I can show you any appointment slots. Our staff will be able to help you with that when they connect with you shortly."}
+{"ts": 1794228760.821399, "turn": 4, "type": "state", "state": {"booked_appointment_id": null, "escalated": true, "flags": [], "intent": "escalate", "offered_slots": [], "patient_id": null, "preferences": {}, "reason": null, "selected_slot": null, "turn_count": 4, "verified": false}}
+{"ts": 1794228760.821462, "turn": 4, "type": "backend", "appointments": {}, "taken": ["P1-20261012-0900", "P1-20261012-0930", "P1-20261013-1300", "P2-20261012-0900", "P2-20261015-1000"]}
