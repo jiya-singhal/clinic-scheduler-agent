@@ -105,7 +105,7 @@ def test_kappa_and_human_sheet_parsing():
     assert H.kappa(["x", "x", "y", "y"], ["x", "y", "x", "y"]) == 0.0
     assert H.kappa(["x", "x"], ["x", "x"]) is None
     key = {"H01": {"pair_id": "v1v2:a", "X": "v2", "Y": "v1"}, "H02": {"pair_id": "v1v2:b", "X": "v1", "Y": "v2"}, "H03": {"pair_id": "v1v2:c", "X": "v1", "Y": "v2"}}
-    assert H.human_verdicts("H01: X\nH02: y\nH03: \n", key) == {"v1v2:a": "v2", "v1v2:b": "v2"}
+    assert H.human_verdicts("H01: X\nH02: y (close call)\nH03: \n", key) == {"v1v2:a": "v2", "v1v2:b": "v2"}
 
 
 def test_audit_end_to_end_with_fake_judges(tmp_path):
@@ -122,6 +122,6 @@ def test_audit_end_to_end_with_fake_judges(tmp_path):
     sheet, key = (tmp_path / "human_sheet.md").read_text(), json.loads((tmp_path / "human_sheet_key.json").read_text())
     assert len(key) == 24 and "H24: " in sheet
     assert not re.search(r"\b(v1|v2|gemini|claude)\b", sheet.split("## Rubric")[1])  # blinded
-    (tmp_path / "human_sheet.md").write_text(sheet.replace("H01: ", "H01: X"))
+    (tmp_path / "human_sheet.md").write_text(sheet.replace("H01: ", "H01: X, close"))
     A.audit(tmp_path, A.Calls(tmp_path / "results.json"), {"opus": longer_wins, "gemini": always_a}, claude_stand_in)
-    assert "H01: X" in (tmp_path / "human_sheet.md").read_text()  # an answered sheet is never overwritten
+    assert "H01: X, close" in (tmp_path / "human_sheet.md").read_text()  # an answered sheet is never overwritten, whatever the answer format

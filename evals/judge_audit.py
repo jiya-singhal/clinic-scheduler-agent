@@ -38,7 +38,7 @@ PAIR_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["re
 FILLER = ('Just to summarise what we discussed so far: you said "{said}". I want to make sure I have understood your request '
           'correctly and that nothing has been missed, so please let me know if any of that is not right.')
 SHEET_SEED = 20261109
-ANSWER_RE = re.compile(r"^(H\d+):\s*(X|Y|tie)\s*$", re.I | re.M)
+FILLED_RE = re.compile(r"^H\d+:[ \t]*\S", re.M)  # any verdict line with something written after the colon
 
 
 # ---- judges: (system, user, schema) -> (json text or None on refusal, usage) ----
@@ -46,9 +46,11 @@ ANSWER_RE = re.compile(r"^(H\d+):\s*(X|Y|tie)\s*$", re.I | re.M)
 def claude_json(system: str, user: str, schema: dict, model: str = J.JUDGE_MODEL):
     import anthropic
     resp = anthropic.Anthropic().messages.create(
-        model=model, max_tokens=2048, system=system, messages=[{"role": "user", "content": user}],
+        model=model, max_tokens=4096, system=system, messages=[{"role": "user", "content": user}],
         output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema}})
     usage = {"model": model, "input_tokens": resp.usage.input_tokens, "output_tokens": resp.usage.output_tokens}
+    if resp.stop_reason == "max_tokens":  # a truncated verdict is not a tie; stop so it is seen (the rerun resumes)
+        raise RuntimeError(f"{model} hit max_tokens on a judge call")
     return (None if resp.stop_reason == "refusal" else next(b.text for b in resp.content if b.type == "text")), usage
 
 
@@ -68,6 +70,7 @@ def gemini_json(system: str, user: str, schema: dict, model: str = GEMINI_MODEL)
 
 
 JUDGES = {"opus": claude_json, "gemini": gemini_json}
+JUDGE_MODELS = {"opus": J.JUDGE_MODEL, "gemini": GEMINI_MODEL}  # in every cache key, so a model change never reuses old verdicts
 
 
 class Calls(dict):
@@ -148,7 +151,7 @@ def run_pairwise(pairs: list[dict], scenarios: dict, judge: str, rubric: str, ca
                 text, usage = call_fn(pair_system(rubric), pair_message(scenarios[p["scenario"]], p["texts"][a], p["texts"][b]), PAIR_SCHEMA)
                 data = json.loads(text) if text else {"winner": "tie", "reason": "judge refused"}
                 return {"winner": data["winner"], "reason": data["reason"], "usage": usage}
-            raw[order] = calls.once(f"pairwise|{judge}|{rubric}|{p['pair_id']}|{order}", go)
+            raw[order] = calls.once(f"pairwise|{judge}|{JUDGE_MODELS.get(judge, judge)}|{rubric}|{p['pair_id']}|{order}", go)
         v = {o: verdict_label(p, o, raw[o]["winner"]) for o in ORDERS}
         rows.append({"pair_id": p["pair_id"], "scenario": p["scenario"], "judge": judge, "rubric": rubric, "AB": v["AB"], "BA": v["BA"],
                      "shown_winner": {o: raw[o]["winner"] for o in ORDERS}, "reasons": {o: raw[o]["reason"] for o in ORDERS},
@@ -235,7 +238,7 @@ def layer1(traces: dict[str, list[dict]], scenarios: dict) -> dict:
 def write_human_sheet(out: Path, pairs: list[dict], scenarios: dict) -> bool:
     """Blinded, shuffled X/Y sheet plus its key. Never overwrites a sheet that already has answers in it."""
     sheet, key_path = out / "human_sheet.md", out / "human_sheet_key.json"
-    if sheet.exists() and ANSWER_RE.search(sheet.read_text()):
+    if sheet.exists() and FILLED_RE.search(sheet.read_text()):
         return False
     rng = random.Random(SHEET_SEED)
     order = list(pairs)
@@ -293,7 +296,7 @@ def audit(out: Path, calls: Calls, judges: dict, agent_traces) -> dict:
             for sid, ev in gem["v2"].items():
                 checks = run_checks(ev, scs[sid])  # the same layer 1 results for original and padded
                 single.setdefault(rubric, {})[sid] = {
-                    v: run_single(scs[sid], e, checks, rubric, calls, f"single|opus|{rubric}|{sid}|{v}", judges["opus"])
+                    v: run_single(scs[sid], e, checks, rubric, calls, f"single|opus|{J.JUDGE_MODEL}|{rubric}|{sid}|{v}", judges["opus"])
                     for v, e in (("original", ev), ("padded", pad(ev)))}
     summary = {"blocks": {n: block_stats(rs) for n, rs in rows.items()},
                "length_single": {r: single_stats(s) for r, s in single.items()},
@@ -386,26 +389,27 @@ def write_report(res: dict, path: Path) -> None:
     L += ["## Self-preference", "",
           "Both judges compare the Gemini agent and the Claude agent on the same 12 scripted scenarios with the same prompt, in both orders. "
           "Raw pick rates mix quality with bias, so the comparison that isolates self-preference is the gap between the two judges on the same pairs.", "",
-          "| judge | single order: gemini / claude / tie (of 24) | both-orders rule: gemini / claude / tie (of 12) |", "|---|---|---|"]
+          "| judge | single order: gemini / claude / tie | both-orders rule: gemini / claude / tie | pairs |", "|---|---|---|---|"]
     fam = {j: blk(f"family|{j}|baseline") for j in ("opus", "gemini")}
     for j, b in fam.items():
-        L.append(f"| {j} | {_c(b['picks_single_order'], 'gemini', 'claude', 'tie')} | {_c(b['picks_both_orders'], 'gemini', 'claude', 'tie')} |"
-                 if b else f"| {j} | not run | not run |")
+        L.append(f"| {j} | {_c(b['picks_single_order'], 'gemini', 'claude', 'tie')} | {_c(b['picks_both_orders'], 'gemini', 'claude', 'tie')} | {b['pairs']} |"
+                 if b else f"| {j} | not run | not run | 0 |")
     if all(fam.values()):
         g, o = fam["gemini"]["picks_single_order"], fam["opus"]["picks_single_order"]
-        L += ["", f"Gemini judge picks the Gemini agent in {g.get('gemini', 0)}/24 single-order verdicts, the Opus judge in {o.get('gemini', 0)}/24. "
-              f"Opus picks the Claude agent in {o.get('claude', 0)}/24, Gemini in {g.get('claude', 0)}/24."]
+        n = 2 * fam["opus"]["pairs"]
+        L += ["", f"Gemini judge picks the Gemini agent in {g.get('gemini', 0)}/{n} single-order verdicts, the Opus judge in {o.get('gemini', 0)}/{n}. "
+              f"Opus picks the Claude agent in {o.get('claude', 0)}/{n}, Gemini in {g.get('claude', 0)}/{n}."]
     L += ["", "Layer 1 checks on the same transcripts, for context (quality the judges cannot see):", "",
           "| agent run | scenarios | all checks pass | mean check pass rate |", "|---|---|---|---|"]
     L += [f"| {k} | {v['scenarios']} | {v['all_checks_pass']} | {v['mean_pass_rate']} |" for k, v in S["layer1"].items()]
     L.append("")
 
     L += ["## v1 vs v2 as a validity check", "", "v2 adds the read-back rule that layer 1 rewards. A judge that prefers v1 here is not measuring what the loop optimised.", "",
-          "| judge | single order: v2 / v1 / tie (of 24) | both-orders rule: v2 / v1 / tie (of 12) |", "|---|---|---|"]
+          "| judge | single order: v2 / v1 / tie | both-orders rule: v2 / v1 / tie | pairs |", "|---|---|---|---|"]
     for j in ("opus", "gemini"):
         b = blk(f"v1v2|{j}|baseline")
         if b:
-            L.append(f"| {j} | {_c(b['picks_single_order'], 'v2', 'v1', 'tie')} | {_c(b['picks_both_orders'], 'v2', 'v1', 'tie')} |")
+            L.append(f"| {j} | {_c(b['picks_single_order'], 'v2', 'v1', 'tie')} | {_c(b['picks_both_orders'], 'v2', 'v1', 'tie')} | {b['pairs']} |")
     L.append("")
 
     L += ["## Two verdicts that flipped with order", ""]
@@ -433,8 +437,9 @@ def write_report(res: dict, path: Path) -> None:
                      f"{bb['picks_both_orders'].get('padded', 0)}/{bb['pairs']} both orders | padded wins {bf['picks_single_order'].get('padded', 0)}/{2 * bf['pairs']}, "
                      f"{bf['picks_both_orders'].get('padded', 0)}/{bf['pairs']} |")
     if all(fam.values()):
-        L.append(f"| (iii) cross-family judge | self-preference | same-family Gemini judge picks Gemini {fam['gemini']['picks_single_order'].get('gemini', 0)}/24 | "
-                 f"cross-family Opus judge picks Gemini {fam['opus']['picks_single_order'].get('gemini', 0)}/24 |")
+        n = 2 * fam["opus"]["pairs"]
+        L.append(f"| (iii) cross-family judge | self-preference | same-family Gemini judge picks Gemini {fam['gemini']['picks_single_order'].get('gemini', 0)}/{n} | "
+                 f"cross-family Opus judge picks Gemini {fam['opus']['picks_single_order'].get('gemini', 0)}/{n} |")
     L.append("")
 
     L += ["## Human agreement", "", "Pending. `human_sheet.md` holds the v1 vs v2 and Gemini vs Claude pairs in a shuffled, blinded order. "

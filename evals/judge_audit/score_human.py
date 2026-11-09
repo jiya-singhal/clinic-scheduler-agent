@@ -13,7 +13,7 @@ from collections import Counter
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-ANSWER_RE = re.compile(r"^(H\d+):\s*(X|Y|tie)\s*$", re.I | re.M)
+ANSWER_RE = re.compile(r"^(H\d+):[ \t]*(X|Y|tie)\b", re.I | re.M)  # tolerates a note after the verdict, e.g. "H03: X (close)"
 
 
 def kappa(a: list[str], b: list[str]) -> float | None:
@@ -42,7 +42,7 @@ def main(argv=None) -> None:
     if not human:
         return
     print("| judge configuration | pair set | agreement | Cohen's kappa |\n|---|---|---|---|")
-    for config, verdicts in json.loads(args.results.read_text())["judge_verdicts"].items():
+    for config, verdicts in json.loads(args.results.read_text()).get("judge_verdicts", {}).items():
         for pair_set in sorted({p.split(":")[0] for p in human} | {"all"}):
             ids = [p for p in human if p in verdicts and pair_set in ("all", p.split(":")[0])]
             if ids:
