@@ -59,6 +59,7 @@ so proposals stay proposals until the reviewer marks them.
 | D43 | Judge audit: pairwise judge in both orders, two judges, three pair sets, resumable calls | Proposal | AI proposal, pending Jiya's review |
 | D44 | Self-preference needs a second answer family: Claude Haiku 4.5 agent through an anthropic_model seam | Proposal | AI proposal, pending Jiya's review |
 | D45 | Three fixes measured, not adopted; blinded human sheet with Cohen's kappa, filled by Jiya | Proposal | AI proposal, human sheet is Jiya's call |
+| D46 | Sheet-only mode, append-only sheet, optional free OpenAI-compatible judge; Opus stays the default | Proposal | Lead request, AI implementation, pending Jiya's review |
 
 ## D1. Model split: Gemini agent, Claude judge `[DIRECTIVE]`
 
@@ -856,6 +857,34 @@ Human agreement: `evals/judge_audit/human_sheet.md` holds the 24 v1/v2 and
 Gemini/Claude pairs in a seeded random order, labelled X and Y at random per
 pair, with the mapping in `human_sheet_key.json`. Jiya fills it, not the AI.
 `score_human.py` reports agreement and Cohen's kappa over X, Y and tie for each
-judge configuration (each order and the both-orders rule). A rerun of the
-audit never overwrites a sheet that already has answers. Blinding is imperfect
+judge configuration (each order and the both-orders rule). The sheet is
+append-only (D46), so a rerun never changes a line already in it. Blinding is imperfect
 for someone who knows the project, because the read-back turn identifies v2.
+
+## D46. Sheet-only mode and a free judge `[PROPOSAL]`
+
+Requested by the team lead so grading and judging need not wait for paid keys.
+
+- `--sheet-only` writes `human_sheet.md` and its key from committed traces with
+  no model calls: the 12 v1 vs v2 pairs now. When the Claude-agent traces exist,
+  the next `--sheet-only` or full run appends the Gemini vs Claude pairs as H13
+  to H24. The sheet is append-only: a pair already in the key keeps its id and
+  its X/Y labels, and the existing file is extended, never rewritten, so filled
+  answers and notes survive. A sheet without its key is refused, since its
+  labels could not be recovered. One cost: position now tells the reader which
+  set a pair is from; X and Y stay random within each pair.
+- `--judges compat` adds a judge over any OpenAI-compatible chat endpoint
+  (OpenRouter free models, a local server), configured by
+  `OPENAI_COMPAT_MODEL`, `OPENROUTER_API_KEY` or `OPENAI_COMPAT_API_KEY`, and
+  `OPENAI_COMPAT_BASE_URL` (default OpenRouter). Stdlib HTTP, no new
+  dependency. Free models rarely enforce a schema, so the schema goes in the
+  prompt, the first JSON object in the reply is the verdict, and anything other
+  than A, B or tie stops the run rather than being counted. Temperature 0. The
+  model name is in `results.json` meta, in each call's usage, and in every
+  cache key. It runs the same blocks as the other judges and, when Opus is not
+  selected, the single-transcript length test with the `evals/judge.py`
+  prompt. A judge from neither family is also a neutral third reading on the
+  self-preference pairs.
+- Opus stays the documented default (`--judges opus,gemini`). A free judge is
+  weaker, so its numbers say how that judge behaves, not how the production
+  judge does.

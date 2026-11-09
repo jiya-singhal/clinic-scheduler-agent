@@ -47,7 +47,7 @@ uv run python -m evals.run --prompt prompts/v1.md --out reports/v1.json         
 uv run python -m evals.run --prompt prompts/v1.md --out reports/x.json --only slot-taken-race --no-judge
 uv run python -m agent.chat --script scenarios/smoke.json                        # scripted replay
 uv run python -m agent.chat --prompt prompts/v2.md                               # chat with the learned prompt
-uv run pytest -v                                                                 # 75 tests, no API calls
+uv run pytest -v                                                                 # 78 tests, no API calls
 uv run --env-file .env python -m evals.judge_audit --out evals/judge_audit/      # judge bias audit, see below
 ```
 
@@ -93,7 +93,7 @@ prompts/      v1.md (hand-written), v2.md (v1 + learned rule R-1)        committ
 reports/      v1.json/.md, v2.json/.md, v2-simulated.json/.md           committed: evidence
 history/      loop.md, versions.json, attempt-1..3/ (rejected runs), clean-clone-run/, accepted-run-traces/ (replayable JSONL for v1, v2, v2-simulated)   committed: evidence
 data/         seed.json (2 providers, 5 patients, 10 business days, fixed today 2026-10-12)
-tests/        75 pytest tests, all offline (fake model, fake judge)
+tests/        78 pytest tests, all offline (fake model, fake judge)
 runs/         JSONL traces, gitignored
 DECISIONS.md  every design choice, proposals vs human calls, index at top
 ASSUMPTIONS.md, DESIGN_NOTE.md, RECORDING.md
@@ -114,10 +114,14 @@ Headline (numbers pending the first live run; every number will come from `evals
 
 ```
 uv run --env-file .env python -m evals.judge_audit --out evals/judge_audit/   # resumable: each call is saved as it lands
+uv run python -m evals.judge_audit --sheet-only --out evals/judge_audit/      # human sheet from saved traces, no model calls
 uv run python evals/judge_audit/score_human.py                                # after filling evals/judge_audit/human_sheet.md
+uv run --env-file .env python -m evals.judge_audit --judges compat --out evals/judge_audit/   # free judge, see below
 ```
 
 `REPORT.md` in the same folder has every table: position flips per judge before and after the both-orders rule, length bias before and after the rubric line, self-preference rates with layer 1 results for context, and two real verdicts that flipped with order with both of the judge's reasons. The human sheet holds the 24 pairs shuffled and blinded as X and Y, with the mapping in `human_sheet_key.json`. A run is estimated from call counts at about 144 Opus calls, 96 Gemini calls and 12 Claude-agent scenario runs, roughly 3 to 4 dollars. The fixes are measured, not adopted: `evals/judge.py` is unchanged (D43 to D45).
+
+The sheet is append-only. `--sheet-only` writes the 12 v1 vs v2 pairs from committed traces now; the Gemini vs Claude pairs are appended as H13 to H24 once their traces exist, and ids, labels and filled answers never change. Opus is the documented judge. `--judges compat` adds a judge that can cost nothing: any OpenAI-compatible endpoint, set with `OPENAI_COMPAT_MODEL` and `OPENROUTER_API_KEY` (or `OPENAI_COMPAT_BASE_URL` and `OPENAI_COMPAT_API_KEY`). Its model is recorded in `results.json` and in every cache key (D46).
 
 ## Cost and runtime (estimates)
 
