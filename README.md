@@ -47,7 +47,8 @@ uv run python -m evals.run --prompt prompts/v1.md --out reports/v1.json         
 uv run python -m evals.run --prompt prompts/v1.md --out reports/x.json --only slot-taken-race --no-judge
 uv run python -m agent.chat --script scenarios/smoke.json                        # scripted replay
 uv run python -m agent.chat --prompt prompts/v2.md                               # chat with the learned prompt
-uv run pytest -v                                                                 # 61 tests, no API calls
+uv run pytest -v                                                                 # 75 tests, no API calls
+uv run --env-file .env python -m evals.judge_audit --out evals/judge_audit/      # judge bias audit, see below
 ```
 
 ## Architecture
@@ -85,17 +86,38 @@ evals.run ──> run_scenario (scripted turns or Gemini-simulated patient, opti
 
 ```
 agent/        backend.py (clinic + enforcement), tools.py (schemas + dispatch), state.py, loop.py (Gemini loop + trace), chat.py (CLI)
-evals/        checks.py, judge.py, score.py, simulate.py, improver.py, versions.py, gate.py, run.py, JUDGE_LIMITS.md
+evals/        checks.py, judge.py, score.py, simulate.py, improver.py, versions.py, gate.py, run.py, JUDGE_LIMITS.md, judge_audit.py
+evals/judge_audit/   REPORT.md, results.json, human_sheet.md (+ key), score_human.py, traces/claude-v2/ (second answer family)
 scenarios/    14 scenario files (12 scripted, 2 simulated) plus smoke.json
 prompts/      v1.md (hand-written), v2.md (v1 + learned rule R-1)        committed: evidence
 reports/      v1.json/.md, v2.json/.md, v2-simulated.json/.md           committed: evidence
 history/      loop.md, versions.json, attempt-1..3/ (rejected runs), clean-clone-run/, accepted-run-traces/ (replayable JSONL for v1, v2, v2-simulated)   committed: evidence
 data/         seed.json (2 providers, 5 patients, 10 business days, fixed today 2026-10-12)
-tests/        61 pytest tests, all offline (fake model, fake judge)
+tests/        75 pytest tests, all offline (fake model, fake judge)
 runs/         JSONL traces, gitignored
 DECISIONS.md  every design choice, proposals vs human calls, index at top
 ASSUMPTIONS.md, DESIGN_NOTE.md, RECORDING.md
 ```
+
+## Judge audit
+
+The layer 2 judge is a model too, so it gets its own eval: `evals/judge_audit.py`, following Zheng et al. 2023 ("Judging LLM-as-a-judge"). It measures three known judge biases on saved transcripts, applies three fixes, and measures again. Opus (`claude-opus-5-5`, the production judge, a different family from the agent) and Gemini (`gemini-3.8-flash`, the agent's own family) both judge.
+
+- **Position.** A pairwise judge sees the scenario brief, two transcripts and the same six criteria as `evals/judge.py`, and picks A, B or tie with a reason. Every pair is judged in both orders. A verdict that changes when the two transcripts swap places is position bias. Pairs: v1 vs v2 on the 12 scripted scenarios, and Gemini agent vs Claude agent on the same 12.
+- **Length.** Each v2 transcript gets a padded copy: every assistant line gains filler that restates the patient's last line and adds nothing. Facts stay identical. The existing single-transcript judge grades both copies with the same layer 1 results, and the pairwise judge compares them in both orders.
+- **Self-preference.** The 12 scripted scenarios are rerun with the v2 prompt on a Claude agent (`claude-haiku-4-5` at temperature 0, through `anthropic_model()` in `agent/loop.py`). Both judges compare Gemini agent and Claude agent in both orders. Raw pick rates mix quality with bias, so the signal is the gap between the two judges on the same pairs.
+- **Fixes.** (i) A win counts only if it holds in both orders, otherwise tie. (ii) The rubric gains "Length and verbosity are not quality; do not reward restatement." (iii) The judge is from a different family than the agent.
+
+Headline (numbers pending the first live run; every number will come from `evals/judge_audit/results.json`):
+
+> Judge agreed with me on X/N: pending human sheet. Swapping answer order changed Y of 12 Opus verdicts and Y of 12 Gemini verdicts on v1 vs v2; judging in both orders and counting only consistent wins removes order effects by construction and leaves Z of 12 decisive. The padded copy outscored the original on P of 12 transcripts before the verbosity rubric line and P' of 12 after.
+
+```
+uv run --env-file .env python -m evals.judge_audit --out evals/judge_audit/   # resumable: each call is saved as it lands
+uv run python evals/judge_audit/score_human.py                                # after filling evals/judge_audit/human_sheet.md
+```
+
+`REPORT.md` in the same folder has every table: position flips per judge before and after the both-orders rule, length bias before and after the rubric line, self-preference rates with layer 1 results for context, and two real verdicts that flipped with order with both of the judge's reasons. The human sheet holds the 24 pairs shuffled and blinded as X and Y, with the mapping in `human_sheet_key.json`. A run is estimated from call counts at about 144 Opus calls, 96 Gemini calls and 12 Claude-agent scenario runs, roughly 3 to 4 dollars. The fixes are measured, not adopted: `evals/judge.py` is unchanged (D43 to D45).
 
 ## Cost and runtime (estimates)
 

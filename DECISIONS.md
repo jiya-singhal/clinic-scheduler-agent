@@ -56,6 +56,9 @@ so proposals stay proposals until the reviewer marks them.
 | D40 | Loop result: v2 accepted, 0.930 to 0.985, rule generalised out of sample | Decided by evidence | Result |
 | D41 | Clean-clone test: two fixes forced; rerun accepted two rules, v1 0.932 to v4 0.983 | Decided by evidence | Result |
 | D42 | Emergency path is a backend control: booking refused after high-urgency escalation, plus a universal check | Decided | Human |
+| D43 | Judge audit: pairwise judge in both orders, two judges, three pair sets, resumable calls | Proposal | AI proposal, pending Jiya's review |
+| D44 | Self-preference needs a second answer family: Claude Haiku 4.5 agent through an anthropic_model seam | Proposal | AI proposal, pending Jiya's review |
+| D45 | Three fixes measured, not adopted; blinded human sheet with Cohen's kappa, filled by Jiya | Proposal | AI proposal, human sheet is Jiya's call |
 
 ## D1. Model split: Gemini agent, Claude judge `[DIRECTIVE]`
 
@@ -781,3 +784,78 @@ emergency-chest-pain with the new check confirmed it still passes and the new
 check passes; the scenario never attempted a booking, so the control is a
 guard, not a behaviour change. Low urgency does not lock the session, since
 "connect me to staff" after a failed verification is not an emergency.
+
+## D43. Judge audit design `[PROPOSAL]`
+
+The layer 2 judge had never been measured, only trusted. `evals/judge_audit.py`
+follows Zheng et al. 2023 and tests position bias, length bias and
+self-preference on saved transcripts, then re-measures with fixes.
+
+- Pairwise judge, separate from `evals/judge.py`: scenario brief, Transcript A,
+  Transcript B, the same six criteria (read from the judge's own prompt so the
+  two cannot drift), JSON `{reason, winner: A|B|tie}`. Reason comes first in the
+  schema so the verdict follows the explanation. It does not see layer 1
+  checks; a bias test should show the judge its two inputs and nothing that
+  decides the answer for it.
+- Every pair is judged in both orders. A verdict "changed by order" when the
+  side picked differs; a full reversal is one side winning each way.
+- Two judges: Opus 5.5 at effort low (the production judge, cross-family) and
+  gemini-3.8-flash at temperature 0 (the agent's family).
+- Pair sets: v1 vs v2 (12 scripted scenarios), Gemini v2 vs Claude v2 (12, see
+  D44), original vs padded v2 (12). The brief asked for 12 extra pairs from the
+  two runs that differ least. No other complete scripted run is committed
+  (the clean-clone traces were not kept and local runs/ has only partial v3 to
+  v5), so the extra 12 are Gemini v2 vs Claude v2 with the same prompt.
+- Budget: about 144 Opus and 96 Gemini calls. The fixed rubric is re-run only
+  on the length tests, the bias it targets.
+- Every call is written to `results.json` as it lands, keyed by test, judge,
+  rubric, pair and order, so an interrupted run resumes and a fully cached run
+  only rebuilds the report.
+
+Status at commit time: built and tested offline only. The first live run on
+2026-11-09 could not start because the Anthropic key in `.env` returned 401
+and the Gemini key returned 402 (prepaid credits exhausted).
+
+## D44. Second answer family for self-preference `[PROPOSAL]`
+
+Every committed transcript is Gemini, so "a judge prefers its own family"
+cannot be measured without a second agent. `agent/loop.py` gains
+`anthropic_model()`, the same model seam as `gemini_model()`: Gemini tool
+schemas become Anthropic tools (`nullable` becomes a null type), the Gemini
+history becomes Anthropic messages with positional tool_use ids (the loop
+answers a turn's calls in order), and the reply comes back as a Gemini
+`Content`, so `Agent`, state, tools and checks run unchanged.
+
+Model: `claude-haiku-4-5` at temperature 0, matching the Gemini agent's
+setting. Sonnet 5.5 was the other option the brief named, but it rejects
+temperature and returns thinking blocks that a Gemini-shaped history cannot
+replay. The anthropic SDK 1.x removed the `temperature` keyword, so it goes
+through `extra_body`.
+
+The statistic is the gap between the two judges on the same pairs, not either
+judge's raw pick rate, because the two agents also differ in quality. Layer 1
+results for both agents are reported next to it for that reason.
+
+## D45. Fixes measured, not adopted; human agreement sheet `[PROPOSAL]`
+
+Three fixes from the plan, each matched to the bias it targets:
+
+1. Both-orders rule: a win counts only if it holds in both orders, otherwise
+   tie. It cannot flip with order by construction, so the report shows its cost
+   instead: how many decisive verdicts become ties.
+2. Rubric line "Length and verbosity are not quality; do not reward
+   restatement." Re-run on the single-transcript and pairwise length tests.
+3. Cross-family judge: compare the Gemini judge's preference for the Gemini
+   agent with the Opus judge's.
+
+`evals/judge.py` is unchanged. Adopting the rubric line in the production
+judge would change every committed score, so that is Jiya's decision once the
+numbers exist.
+
+Human agreement: `evals/judge_audit/human_sheet.md` holds the 24 v1/v2 and
+Gemini/Claude pairs in a seeded random order, labelled X and Y at random per
+pair, with the mapping in `human_sheet_key.json`. Jiya fills it, not the AI.
+`score_human.py` reports agreement and Cohen's kappa over X, Y and tie for each
+judge configuration (each order and the both-orders rule). A rerun of the
+audit never overwrites a sheet that already has answers. Blinding is imperfect
+for someone who knows the project, because the read-back turn identifies v2.
