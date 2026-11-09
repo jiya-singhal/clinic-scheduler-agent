@@ -17,6 +17,7 @@ from agent.tools import TOOL_SCHEMAS, dispatch
 
 MAX_TOOL_CALLS = 4
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")  # 2.5-flash is retired for new keys, see D16
+ANTHROPIC_AGENT_MODEL = "claude-haiku-4-5"  # judge audit only: second answer family; accepts temperature 0, no thinking blocks to replay
 SLOT_ID_RE = re.compile(r"\bP\d-\d{8}-\d{4}\b")
 
 DEFAULT_PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "v1.md"
@@ -39,6 +40,55 @@ def gemini_model(client, model: str = MODEL) -> ModelFn:
         )
         resp = client.models.generate_content(model=model, contents=history, config=config)
         return resp.candidates[0].content
+
+    return call
+
+
+def _json_schema(s):
+    """Gemini schema dialect -> JSON Schema: `nullable: true` becomes a null type."""
+    if not isinstance(s, dict):
+        return s
+    out = {k: _json_schema(v) for k, v in s.items() if k != "nullable"}
+    if s.get("nullable"):
+        out["type"] = [s["type"], "null"]
+    return out
+
+
+ANTHROPIC_TOOLS = [{"name": s["name"], "description": s["description"], "input_schema": _json_schema(s["parameters"])} for s in TOOL_SCHEMAS]
+
+
+def to_anthropic_messages(history: list[types.Content]) -> list[dict]:
+    """Gemini history -> Anthropic messages. The loop answers a model turn's calls in order in the next user turn,
+    so tool_use ids are positional (call_<turn>_<part>) and each function_response takes the next id."""
+    msgs, prev_ids = [], []
+    for i, c in enumerate(history):
+        ids, pending, blocks = [], iter(prev_ids), []
+        for j, p in enumerate(c.parts or []):
+            if p.function_call:
+                ids.append(f"call_{i}_{j}")
+                blocks.append({"type": "tool_use", "id": ids[-1], "name": p.function_call.name, "input": dict(p.function_call.args or {})})
+            elif p.function_response:
+                blocks.append({"type": "tool_result", "tool_use_id": next(pending), "content": json.dumps(p.function_response.response)})
+            elif p.text:
+                blocks.append({"type": "text", "text": p.text})
+        prev_ids = ids
+        if blocks:  # an empty model turn is dropped; the API merges the consecutive user turns that leaves
+            msgs.append({"role": "assistant" if c.role == "model" else "user", "content": blocks})
+    return msgs
+
+
+def from_anthropic_content(blocks) -> types.Content:
+    parts = [types.Part(text=b.text) if b.type == "text" else types.Part.from_function_call(name=b.name, args=dict(b.input))
+             for b in blocks if b.type in ("text", "tool_use")]
+    return types.Content(role="model", parts=parts)
+
+
+def anthropic_model(client, model: str = ANTHROPIC_AGENT_MODEL) -> ModelFn:
+    """Same seam as gemini_model, on Claude: tool schemas mapped to Anthropic tools, history mapped both ways."""
+    def call(history, system, tools_enabled):
+        resp = client.messages.create(model=model, max_tokens=1024, system=system, tools=ANTHROPIC_TOOLS, extra_body={"temperature": 0},
+                                      tool_choice={"type": "auto" if tools_enabled else "none"}, messages=to_anthropic_messages(history))
+        return from_anthropic_content(resp.content)
 
     return call
 
