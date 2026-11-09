@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import re
 from collections import Counter
@@ -38,7 +39,6 @@ PAIR_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["re
 FILLER = ('Just to summarise what we discussed so far: you said "{said}". I want to make sure I have understood your request '
           'correctly and that nothing has been missed, so please let me know if any of that is not right.')
 SHEET_SEED = 20261109
-FILLED_RE = re.compile(r"^H\d+:[ \t]*\S", re.M)  # any verdict line with something written after the colon
 
 
 # ---- judges: (system, user, schema) -> (json text or None on refusal, usage) ----
@@ -69,8 +69,37 @@ def gemini_json(system: str, user: str, schema: dict, model: str = GEMINI_MODEL)
                        "output_tokens": (u.candidates_token_count or 0) + (u.thoughts_token_count or 0)}
 
 
-JUDGES = {"opus": claude_json, "gemini": gemini_json}
-JUDGE_MODELS = {"opus": J.JUDGE_MODEL, "gemini": GEMINI_MODEL}  # in every cache key, so a model change never reuses old verdicts
+COMPAT_BASE_URL = "https://openrouter.ai/api/v1"
+
+
+def compat_json(system: str, user: str, schema: dict):
+    """Any OpenAI-compatible chat endpoint, for a judge that costs nothing (an OpenRouter free model, a local server).
+    Env: OPENAI_COMPAT_MODEL (required), OPENAI_COMPAT_BASE_URL (default OpenRouter), OPENAI_COMPAT_API_KEY or OPENROUTER_API_KEY.
+    Stdlib HTTP, no new dependency. The schema goes in the prompt because free models rarely enforce one; the first JSON
+    object in the reply is the verdict."""
+    import urllib.request
+    model = judge_model("compat")
+    body = {"model": model, "temperature": 0, "messages": [
+        {"role": "system", "content": f"{system}\n\nReply with only a JSON object matching this JSON Schema, no other text:\n{json.dumps(schema)}"},
+        {"role": "user", "content": user}]}
+    req = urllib.request.Request(
+        f"{os.environ.get('OPENAI_COMPAT_BASE_URL', COMPAT_BASE_URL).rstrip('/')}/chat/completions", data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json",
+                 "Authorization": f"Bearer {os.environ.get('OPENAI_COMPAT_API_KEY') or os.environ.get('OPENROUTER_API_KEY', '')}"})
+    with urllib.request.urlopen(req, timeout=300) as r:
+        data = json.loads(r.read())
+    m = re.search(r"\{.*\}", data["choices"][0]["message"].get("content") or "", re.S)
+    u = data.get("usage") or {}
+    return (m.group(0) if m else None), {"model": model, "input_tokens": u.get("prompt_tokens"), "output_tokens": u.get("completion_tokens")}
+
+
+JUDGES = {"opus": claude_json, "gemini": gemini_json, "compat": compat_json}
+JUDGE_ORDER = ("opus", "gemini", "compat")  # opus is the production judge and the documented default
+
+
+def judge_model(judge: str) -> str:
+    """Model behind a judge name. It is in every cache key, so a model change never reuses old verdicts."""
+    return {"opus": J.JUDGE_MODEL, "gemini": GEMINI_MODEL, "compat": os.environ.get("OPENAI_COMPAT_MODEL", "")}.get(judge, judge)
 
 
 class Calls(dict):
@@ -149,9 +178,11 @@ def run_pairwise(pairs: list[dict], scenarios: dict, judge: str, rubric: str, ca
             a, b = shown(p, order)
             def go(a=a, b=b):
                 text, usage = call_fn(pair_system(rubric), pair_message(scenarios[p["scenario"]], p["texts"][a], p["texts"][b]), PAIR_SCHEMA)
-                data = json.loads(text) if text else {"winner": "tie", "reason": "judge refused"}
-                return {"winner": data["winner"], "reason": data["reason"], "usage": usage}
-            raw[order] = calls.once(f"pairwise|{judge}|{JUDGE_MODELS.get(judge, judge)}|{rubric}|{p['pair_id']}|{order}", go)
+                data = json.loads(text) if text else {"winner": "tie", "reason": "judge returned no verdict (refusal or no JSON)"}
+                if data.get("winner") not in ("A", "B", "tie"):  # schema-enforced judges never get here; a free model can
+                    raise ValueError(f"{judge} returned an invalid verdict {data.get('winner')!r}")
+                return {"winner": data["winner"], "reason": str(data.get("reason", "")), "usage": usage}
+            raw[order] = calls.once(f"pairwise|{judge}|{judge_model(judge)}|{rubric}|{p['pair_id']}|{order}", go)
         v = {o: verdict_label(p, o, raw[o]["winner"]) for o in ORDERS}
         rows.append({"pair_id": p["pair_id"], "scenario": p["scenario"], "judge": judge, "rubric": rubric, "AB": v["AB"], "BA": v["BA"],
                      "shown_winner": {o: raw[o]["winner"] for o in ORDERS}, "reasons": {o: raw[o]["reason"] for o in ORDERS},
@@ -235,29 +266,37 @@ def layer1(traces: dict[str, list[dict]], scenarios: dict) -> dict:
 
 # ---- human sheet ----
 
-def write_human_sheet(out: Path, pairs: list[dict], scenarios: dict) -> bool:
-    """Blinded, shuffled X/Y sheet plus its key. Never overwrites a sheet that already has answers in it."""
+def write_human_sheet(out: Path, pairs: list[dict], scenarios: dict) -> list[str]:
+    """Blinded X/Y sheet plus its key, append-only. Pairs already in the key keep their id and labels, and the existing file
+    is never rewritten: new pairs are shuffled and appended after it as the next ids (H13 onward). Returns the new ids."""
     sheet, key_path = out / "human_sheet.md", out / "human_sheet_key.json"
-    if sheet.exists() and FILLED_RE.search(sheet.read_text()):
-        return False
-    rng = random.Random(SHEET_SEED)
-    order = list(pairs)
-    rng.shuffle(order)
-    key, L = {}, ["# Judge audit: human sheet", "",
-                  "For each pair, read both transcripts and decide which conversation is better overall on the rubric below, or tie.",
-                  "Labels X and Y are random per pair. Do not open human_sheet_key.json until you are done.",
-                  "Write X, Y or tie after each id in the verdict list at the bottom, then run:", "",
-                  "```", "uv run python evals/judge_audit/score_human.py", "```", "", "## Rubric", "", RUBRIC, ""]
-    for i, p in enumerate(order, 1):
-        hid = f"H{i:02d}"
+    if sheet.exists() != key_path.exists():
+        raise SystemExit(f"{sheet.name} and {key_path.name} must exist together; not touching either")
+    key = json.loads(key_path.read_text()) if key_path.exists() else {}
+    known = {k["pair_id"] for k in key.values()}
+    new = [p for p in pairs if p["pair_id"] not in known]
+    if not new:
+        return []
+    fresh, rng = not key, random.Random(SHEET_SEED + len(key))
+    rng.shuffle(new)
+    L = ["# Judge audit: human sheet", "",
+         "For each pair, read both transcripts and decide which conversation is better overall on the rubric below, or tie.",
+         "Labels X and Y are random per pair. Do not open human_sheet_key.json until you are done.",
+         "Write X, Y or tie after each id in the verdict list that follows each batch of pairs, then run:", "",
+         "```", "uv run python evals/judge_audit/score_human.py", "```", "",
+         "More pairs may be appended below later as new ids. Lines already here are never changed.", "", "## Rubric", "", RUBRIC, ""] if fresh else [""]
+    ids = []
+    for i, p in enumerate(new, len(key) + 1):
+        ids.append(f"H{i:02d}")
         x, y = rng.sample(p["labels"], 2)
-        key[hid] = {"pair_id": p["pair_id"], "X": x, "Y": y}
-        L += [f"## {hid}", "", brief(scenarios[p["scenario"]]), "", "Transcript X:", "", "```", p["texts"][x], "```", "",
+        key[ids[-1]] = {"pair_id": p["pair_id"], "X": x, "Y": y}
+        L += [f"## {ids[-1]}", "", brief(scenarios[p["scenario"]]), "", "Transcript X:", "", "```", p["texts"][x], "```", "",
               "Transcript Y:", "", "```", p["texts"][y], "```", ""]
-    L += ["## Your verdicts (X, Y or tie)", ""] + [f"{h}: " for h in key] + [""]
-    sheet.write_text("\n".join(L))
+    L += [f"## Your verdicts for {ids[0]} to {ids[-1]} (X, Y or tie)", ""] + [f"{h}: " for h in ids] + [""]
+    with open(sheet, "w" if fresh else "a") as f:
+        f.write("\n".join(L))
     key_path.write_text(json.dumps(key, indent=1) + "\n")
-    return True
+    return ids
 
 
 def judge_verdicts(rows: dict[str, list[dict]], sets: tuple[str, ...]) -> dict[str, dict[str, str]]:
@@ -273,46 +312,66 @@ def judge_verdicts(rows: dict[str, list[dict]], sets: tuple[str, ...]) -> dict[s
 
 # ---- the audit ----
 
-PLAN = [  # (pair set, judge, rubric); the fixed rubric is re-run where it targets a bias (length)
-    ("v1v2", "opus", "baseline"), ("v1v2", "gemini", "baseline"),
-    ("family", "opus", "baseline"), ("family", "gemini", "baseline"),
-    ("length", "opus", "baseline"), ("length", "gemini", "baseline"),
-    ("length", "opus", "fixed"), ("length", "gemini", "fixed"),
-]
+BLOCKS = [("v1v2", "baseline"), ("family", "baseline"), ("length", "baseline"), ("length", "fixed")]  # per judge: (pair set, rubric);
+# the fixed rubric is re-run where it targets a bias (length)
+
+
+def scripted() -> dict[str, dict]:
+    return {s["id"]: s for s in load_scenarios() if s["mode"] == "scripted"}
+
+
+def saved(version: str, scs: dict) -> dict[str, list[dict]]:
+    return {sid: load_events(TRACES / version / f"{sid}.jsonl") for sid in scs}
+
+
+def existing_claude_traces(out: Path, scenarios: list[dict]) -> dict[str, list[dict]]:
+    return {s["id"]: load_events(p) for s in scenarios if (p := out / "traces" / "claude-v2" / f"{s['id']}.jsonl").exists()}
+
+
+def sheet_only(out: Path) -> list[str]:
+    """Human sheet from saved traces, no model calls: v1 vs v2 now, Gemini vs Claude appended once those traces exist."""
+    scs = scripted()
+    v2, claude = saved("v2", scs), existing_claude_traces(out, list(scs.values()))
+    return (write_human_sheet(out, make_pairs("v1v2", {"v1": saved("v1", scs), "v2": v2}), scs)
+            + write_human_sheet(out, make_pairs("family", {"gemini": v2, "claude": claude}), scs))
 
 
 def audit(out: Path, calls: Calls, judges: dict, agent_traces) -> dict:
     """judges: {name: call_fn}; blocks for a judge not in it are skipped. agent_traces(out, scenarios) -> {id: events}."""
-    scs = {s["id"]: s for s in load_scenarios() if s["mode"] == "scripted"}
-    gem = {v: {sid: load_events(TRACES / v / f"{sid}.jsonl") for sid in scs} for v in ("v1", "v2")}
+    scs = scripted()
+    gem = {v: saved(v, scs) for v in ("v1", "v2")}
     claude = agent_traces(out, list(scs.values()))
     pairs = {"v1v2": make_pairs("v1v2", {"v1": gem["v1"], "v2": gem["v2"]}),
              "family": make_pairs("family", {"gemini": gem["v2"], "claude": claude}),
              "length": make_pairs("length", {"original": gem["v2"], "padded": {s: pad(e) for s, e in gem["v2"].items()}})}
-    rows = {f"{s}|{j}|{r}": run_pairwise(pairs[s], scs, j, r, calls, judges[j]) for s, j, r in PLAN if j in judges and pairs[s]}
-    single = {}
-    if "opus" in judges:
+    plan = [(s, j, r) for j in judges for s, r in BLOCKS]
+    rows = {f"{s}|{j}|{r}": run_pairwise(pairs[s], scs, j, r, calls, judges[j]) for s, j, r in plan if pairs[s]}
+    single, sj = {}, next((j for j in ("opus", "compat") if j in judges), None)  # the production judge, else the free one
+    if sj:
         for rubric in ("baseline", "fixed"):
             for sid, ev in gem["v2"].items():
                 checks = run_checks(ev, scs[sid])  # the same layer 1 results for original and padded
                 single.setdefault(rubric, {})[sid] = {
-                    v: run_single(scs[sid], e, checks, rubric, calls, f"single|opus|{J.JUDGE_MODEL}|{rubric}|{sid}|{v}", judges["opus"])
+                    v: run_single(scs[sid], e, checks, rubric, calls, f"single|{sj}|{judge_model(sj)}|{rubric}|{sid}|{v}", judges[sj])
                     for v, e in (("original", ev), ("padded", pad(ev)))}
     summary = {"blocks": {n: block_stats(rs) for n, rs in rows.items()},
                "length_single": {r: single_stats(s) for r, s in single.items()},
+               "length_single_judge": f"{sj} `{judge_model(sj)}`" if sj else None,
                "layer1": {"gemini-v1": layer1(gem["v1"], scs), "gemini-v2": layer1(gem["v2"], scs), "claude-v2": layer1(claude, scs)},
                "tokens": token_totals(calls)}
     results = {"meta": {"generated_at": datetime.now().isoformat(timespec="seconds"),
-                        "models": {"opus_judge": J.JUDGE_MODEL, "gemini_judge": GEMINI_MODEL, "gemini_agent": GEMINI_MODEL,
-                                   "claude_agent": ANTHROPIC_AGENT_MODEL},
+                        "models": {"opus_judge": J.JUDGE_MODEL, "gemini_judge": GEMINI_MODEL, "compat_judge": judge_model("compat") or None,
+                                   "gemini_agent": GEMINI_MODEL, "claude_agent": ANTHROPIC_AGENT_MODEL},
                         "settings": {"opus": "effort low, no temperature parameter (rejected by the model)", "gemini": "temperature 0",
+                                     "compat": f"temperature 0, {os.environ.get('OPENAI_COMPAT_BASE_URL', COMPAT_BASE_URL)}",
                                      "claude_agent": "temperature 0, prompts/v2.md, scripted scenarios"},
-                        "fix_line": FIX_LINE, "filler": FILLER, "plan": [list(p) for p in PLAN], "judges_run": sorted(judges),
+                        "fix_line": FIX_LINE, "filler": FILLER, "plan": [list(p) for p in plan], "judges_run": list(judges),
                         "pair_sets": {s: [p["pair_id"] for p in ps] for s, ps in pairs.items()}},
                "summary": summary, "rows": rows, "single": single,
                "judge_verdicts": judge_verdicts(rows, ("v1v2", "family")), "calls": dict(calls)}
     (out / "results.json").write_text(json.dumps(results, indent=1) + "\n")
-    write_human_sheet(out, pairs["v1v2"] + pairs["family"], scs)
+    write_human_sheet(out, pairs["v1v2"], scs)  # H01 to H12
+    write_human_sheet(out, pairs["family"], scs)  # appended as H13 onward, never renumbering the first batch
     write_report(results, out / "REPORT.md")
     return results
 
@@ -334,16 +393,19 @@ def write_report(res: dict, path: Path) -> None:
     S, B, M = res["summary"], res["summary"]["blocks"], res["meta"]
     def blk(name):
         return B.get(name)
+    js = [j for j in JUDGE_ORDER if any(n.split("|")[1] == j for n in B)]
+    desc = {"opus": f"Opus `{M['models']['opus_judge']}` (production judge, cross-family, effort low)",
+            "gemini": f"Gemini `{M['models']['gemini_judge']}` (same family as the agent, temperature 0)",
+            "compat": f"OpenAI-compatible `{M['models'].get('compat_judge')}` (neither family, temperature 0)"}
     L = ["# Judge audit", "",
          f"Generated {M['generated_at']} by `python -m evals.judge_audit`. Every number below is computed from `results.json` in this folder.", "",
-         f"Judges: Opus `{M['models']['opus_judge']}` (cross-family, effort low) and Gemini `{M['models']['gemini_judge']}` "
-         f"(same family as the agent, temperature 0). Second answer model for the self-preference test: `{M['models']['claude_agent']}` "
-         "at temperature 0 with `prompts/v2.md`. Method after Zheng et al. 2023.", ""]
+         f"Judges: {'; '.join(desc[j] for j in js) or 'none run'}. Second answer model for the self-preference test: "
+         f"`{M['models']['claude_agent']}` at temperature 0 with `prompts/v2.md`. Method after Zheng et al. 2023.", ""]
     L += ["| model | calls | input tokens | output tokens |", "|---|---|---|---|"]
     L += [f"| {m} | {t['calls']} | {t['input_tokens']} | {t['output_tokens']} |" for m, t in S["tokens"].items()] + [""]
 
     L += ["## Headline", "", "- Judge agreed with me on X/N: pending human sheet (`human_sheet.md`, scored by `score_human.py`)."]
-    for j in ("opus", "gemini"):
+    for j in js:
         b = blk(f"v1v2|{j}|baseline")
         if b:
             L.append(f"- {j}: swapping answer order changed {b['flips']}/{b['pairs']} verdicts on v1 vs v2; judging in both orders and "
@@ -370,7 +432,7 @@ def write_report(res: dict, path: Path) -> None:
 
     L += ["## Length bias", "", f"Padding appends this to every assistant line, with the patient's previous line filled in: \"{M['filler']}\". "
           "Facts are unchanged; only length grows.", "",
-          "Single-transcript judge (`evals/judge.py`, Opus, same layer 1 results for both copies):", "",
+          f"Single-transcript judge (`evals/judge.py` prompt, {S.get('length_single_judge') or 'not run'}, same layer 1 results for both copies):", "",
           "| rubric | padded scored higher | equal | padded lower | mean original | mean padded | clarity delta | resolves_request delta |",
           "|---|---|---|---|---|---|---|---|"]
     for r, s in S["length_single"].items():
@@ -390,11 +452,11 @@ def write_report(res: dict, path: Path) -> None:
           "Both judges compare the Gemini agent and the Claude agent on the same 12 scripted scenarios with the same prompt, in both orders. "
           "Raw pick rates mix quality with bias, so the comparison that isolates self-preference is the gap between the two judges on the same pairs.", "",
           "| judge | single order: gemini / claude / tie | both-orders rule: gemini / claude / tie | pairs |", "|---|---|---|---|"]
-    fam = {j: blk(f"family|{j}|baseline") for j in ("opus", "gemini")}
+    fam = {j: blk(f"family|{j}|baseline") for j in js}
     for j, b in fam.items():
         L.append(f"| {j} | {_c(b['picks_single_order'], 'gemini', 'claude', 'tie')} | {_c(b['picks_both_orders'], 'gemini', 'claude', 'tie')} | {b['pairs']} |"
                  if b else f"| {j} | not run | not run | 0 |")
-    if all(fam.values()):
+    if fam.get("opus") and fam.get("gemini"):
         g, o = fam["gemini"]["picks_single_order"], fam["opus"]["picks_single_order"]
         n = 2 * fam["opus"]["pairs"]
         L += ["", f"Gemini judge picks the Gemini agent in {g.get('gemini', 0)}/{n} single-order verdicts, the Opus judge in {o.get('gemini', 0)}/{n}. "
@@ -406,7 +468,7 @@ def write_report(res: dict, path: Path) -> None:
 
     L += ["## v1 vs v2 as a validity check", "", "v2 adds the read-back rule that layer 1 rewards. A judge that prefers v1 here is not measuring what the loop optimised.", "",
           "| judge | single order: v2 / v1 / tie | both-orders rule: v2 / v1 / tie | pairs |", "|---|---|---|---|"]
-    for j in ("opus", "gemini"):
+    for j in js:
         b = blk(f"v1v2|{j}|baseline")
         if b:
             L.append(f"| {j} | {_c(b['picks_single_order'], 'v2', 'v1', 'tie')} | {_c(b['picks_both_orders'], 'v2', 'v1', 'tie')} | {b['pairs']} |")
@@ -422,7 +484,7 @@ def write_report(res: dict, path: Path) -> None:
               f"- Order BA, picked {r['shown_winner']['BA']} = `{r['BA']}`: \"{r['reasons']['BA']}\"", ""]
 
     L += ["## Fixes, before and after", "", "| fix | targets | before | after |", "|---|---|---|---|"]
-    for j in ("opus", "gemini"):
+    for j in js:
         b = blk(f"v1v2|{j}|baseline")
         if b:
             L.append(f"| (i) both-orders rule, {j} | position | {b['flips']}/{b['pairs']} verdicts changed by order | 0 by construction, "
@@ -430,13 +492,13 @@ def write_report(res: dict, path: Path) -> None:
     sb, sf = S["length_single"].get("baseline"), S["length_single"].get("fixed")
     if sb and sf:
         L.append(f"| (ii) verbosity rubric line, single judge | length | padded higher {sb['padded_higher']}/{sb['scenarios']} | padded higher {sf['padded_higher']}/{sf['scenarios']} |")
-    for j in ("opus", "gemini"):
+    for j in js:
         bb, bf = blk(f"length|{j}|baseline"), blk(f"length|{j}|fixed")
         if bb and bf:
             L.append(f"| (ii) verbosity rubric line, pairwise {j} | length | padded wins {bb['picks_single_order'].get('padded', 0)}/{2 * bb['pairs']} single-order, "
                      f"{bb['picks_both_orders'].get('padded', 0)}/{bb['pairs']} both orders | padded wins {bf['picks_single_order'].get('padded', 0)}/{2 * bf['pairs']}, "
                      f"{bf['picks_both_orders'].get('padded', 0)}/{bf['pairs']} |")
-    if all(fam.values()):
+    if fam.get("opus") and fam.get("gemini"):
         n = 2 * fam["opus"]["pairs"]
         L.append(f"| (iii) cross-family judge | self-preference | same-family Gemini judge picks Gemini {fam['gemini']['picks_single_order'].get('gemini', 0)}/{n} | "
                  f"cross-family Opus judge picks Gemini {fam['opus']['picks_single_order'].get('gemini', 0)}/{n} |")
@@ -458,14 +520,24 @@ def write_report(res: dict, path: Path) -> None:
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description="LLM-as-judge bias audit")
     ap.add_argument("--out", type=Path, default=Path("evals/judge_audit"))
-    ap.add_argument("--judges", default="opus,gemini", help="comma list of judges to run (opus, gemini); others are reported as not run")
+    ap.add_argument("--judges", default="opus,gemini",
+                    help="comma list from opus (production judge), gemini, compat (any OpenAI-compatible endpoint, e.g. a free OpenRouter model)")
     ap.add_argument("--no-claude-agent", action="store_true", help="do not generate Claude-agent traces; the family set uses any that exist")
+    ap.add_argument("--sheet-only", action="store_true", help="write or extend the human sheet from saved traces only; no model calls")
     args = ap.parse_args(argv)
-    load_env()
     args.out.mkdir(parents=True, exist_ok=True)
-    judges = {j: JUDGES[j] for j in args.judges.split(",")}
-    agent_fn = (lambda out, scs: {s["id"]: load_events(p) for s in scs if (p := out / "traces" / "claude-v2" / f"{s['id']}.jsonl").exists()}) \
-        if args.no_claude_agent else claude_agent_traces
+    if args.sheet_only:
+        ids = sheet_only(args.out)
+        print(f"{len(ids)} pairs added ({', '.join(ids[:1] + ids[-1:]) or 'none new'}) -> {args.out / 'human_sheet.md'}")
+        return
+    load_env()
+    names = args.judges.split(",")
+    if set(names) - set(JUDGES):
+        ap.error(f"unknown judge(s) {sorted(set(names) - set(JUDGES))}; choose from {sorted(JUDGES)}")
+    if "compat" in names and not judge_model("compat"):
+        ap.error("--judges compat needs OPENAI_COMPAT_MODEL (and OPENROUTER_API_KEY or OPENAI_COMPAT_API_KEY) in the environment")
+    judges = {j: JUDGES[j] for j in names}
+    agent_fn = existing_claude_traces if args.no_claude_agent else claude_agent_traces
     res = audit(args.out, Calls(args.out / "results.json"), judges, agent_fn)
     print(json.dumps(res["summary"]["blocks"], indent=1))
     print(f"-> {args.out / 'results.json'}, {args.out / 'REPORT.md'}, {args.out / 'human_sheet.md'}")

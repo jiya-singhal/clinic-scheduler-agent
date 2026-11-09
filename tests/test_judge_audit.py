@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import re
+import shutil
 from pathlib import Path
 
 from evals import judge as J
@@ -112,7 +113,7 @@ def test_audit_end_to_end_with_fake_judges(tmp_path):
     claude_stand_in = lambda out, scs: {s["id"]: ev(s["id"], "v1") for s in scs}  # plumbing only
     res = A.audit(tmp_path, A.Calls(tmp_path / "results.json"), {"opus": longer_wins, "gemini": always_a}, claude_stand_in)
     b = res["summary"]["blocks"]
-    assert len(b) == len(A.PLAN) and all(x["pairs"] == 12 for x in b.values())
+    assert len(b) == 2 * len(A.BLOCKS) and all(x["pairs"] == 12 for x in b.values())
     assert b["v1v2|gemini|baseline"]["flips"] == 12 and b["v1v2|gemini|baseline"]["decisive_both_orders"] == 0
     assert b["length|opus|baseline"]["picks_both_orders"] == {"padded": 12}
     assert res["summary"]["length_single"]["baseline"]["padded_higher"] == 12
@@ -125,3 +126,72 @@ def test_audit_end_to_end_with_fake_judges(tmp_path):
     (tmp_path / "human_sheet.md").write_text(sheet.replace("H01: ", "H01: X, close"))
     A.audit(tmp_path, A.Calls(tmp_path / "results.json"), {"opus": longer_wins, "gemini": always_a}, claude_stand_in)
     assert "H01: X, close" in (tmp_path / "human_sheet.md").read_text()  # an answered sheet is never overwritten, whatever the answer format
+
+
+def test_sheet_only_then_family_appended_as_h13_to_h24_without_touching_answers(tmp_path):
+    sheet, key_path = tmp_path / "human_sheet.md", tmp_path / "human_sheet_key.json"
+    assert A.sheet_only(tmp_path) == [f"H{i:02d}" for i in range(1, 13)]  # saved v1/v2 traces only, no Claude traces yet
+    key1 = json.loads(key_path.read_text())
+    assert all(k["pair_id"].startswith("v1v2:") for k in key1.values())
+    answered = sheet.read_text().replace("H01: ", "H01: X (close)").replace("H07: ", "H07: tie")
+    sheet.write_text(answered)
+    assert A.sheet_only(tmp_path) == [] and sheet.read_text() == answered  # nothing new, nothing rewritten
+    d = tmp_path / "traces" / "claude-v2"
+    d.mkdir(parents=True)
+    for f in (A.TRACES / "v1").glob("*.jsonl"):  # stand-in Claude traces
+        shutil.copy(f, d / f.name)
+    assert A.sheet_only(tmp_path) == [f"H{i}" for i in range(13, 25)]
+    assert sheet.read_text().startswith(answered)  # first 12 and their answers byte-for-byte unchanged
+    key2 = json.loads(key_path.read_text())
+    assert {h: key2[h] for h in key1} == key1 and all(key2[f"H{i}"]["pair_id"].startswith("family:") for i in range(13, 25))
+    key_path.unlink()
+    try:
+        A.sheet_only(tmp_path)
+        raise AssertionError("a sheet without its key must not be touched")
+    except SystemExit:
+        pass
+
+
+def test_compat_judge_posts_openai_shape_and_extracts_the_json(monkeypatch):
+    sent = {}
+
+    class Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            reply = 'Sure.\n```json\n{"reason": "B reads the slot back", "winner": "B"}\n```'
+            return json.dumps({"choices": [{"message": {"content": reply}}], "usage": {"prompt_tokens": 10, "completion_tokens": 5}}).encode()
+
+    def fake_urlopen(req, timeout):
+        sent.update(url=req.full_url, auth=req.get_header("Authorization"), body=json.loads(req.data))
+        return Resp()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setenv("OPENAI_COMPAT_MODEL", "vendor/free-model:free")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.delenv("OPENAI_COMPAT_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_COMPAT_BASE_URL", raising=False)
+    text, usage = A.compat_json("SYS", "USER", A.PAIR_SCHEMA)
+    assert json.loads(text) == {"reason": "B reads the slot back", "winner": "B"}
+    assert sent["url"] == "https://openrouter.ai/api/v1/chat/completions" and sent["auth"] == "Bearer test-key"
+    body = sent["body"]
+    assert body["model"] == "vendor/free-model:free" and body["temperature"] == 0 and body["messages"][1] == {"role": "user", "content": "USER"}
+    assert '"winner"' in body["messages"][0]["content"]  # schema in the prompt
+    assert usage == {"model": "vendor/free-model:free", "input_tokens": 10, "output_tokens": 5}
+    assert A.judge_model("compat") == "vendor/free-model:free"  # and so in every cache key
+
+
+def test_invalid_verdict_from_a_loose_judge_stops_instead_of_counting(tmp_path):
+    scs = {"happy-path-book": json.loads(Path("scenarios/happy-path-book.json").read_text())}
+    pairs = A.make_pairs("v1v2", {"v1": {"happy-path-book": ev("happy-path-book", "v1")}, "v2": {"happy-path-book": ev("happy-path-book")}})
+    loose = lambda *a: (json.dumps({"winner": "Transcript A", "reason": "x"}), {"model": "fake"})
+    try:
+        A.run_pairwise(pairs, scs, "compat", "baseline", A.Calls(tmp_path / "r.json"), loose)
+        raise AssertionError("invalid verdict accepted")
+    except ValueError:
+        pass
+    assert not (tmp_path / "r.json").exists()  # nothing cached, so a rerun retries

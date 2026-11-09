@@ -41,8 +41,12 @@ def main(argv=None) -> None:
     print(f"{len(human)} of {len(key)} pairs answered")
     if not human:
         return
+    configs = json.loads(args.results.read_text()).get("judge_verdicts", {}) if args.results.exists() else {}
+    if not configs:
+        print(f"no judge verdicts in {args.results} yet; run python -m evals.judge_audit, then score again")
+        return
     print("| judge configuration | pair set | agreement | Cohen's kappa |\n|---|---|---|---|")
-    for config, verdicts in json.loads(args.results.read_text()).get("judge_verdicts", {}).items():
+    for config, verdicts in configs.items():
         for pair_set in sorted({p.split(":")[0] for p in human} | {"all"}):
             ids = [p for p in human if p in verdicts and pair_set in ("all", p.split(":")[0])]
             if ids:
