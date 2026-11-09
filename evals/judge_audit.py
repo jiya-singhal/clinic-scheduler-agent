@@ -79,6 +79,7 @@ class Calls(dict):
 
     def once(self, key: str, fn):
         if key not in self:
+            print(f"[{len(self) + 1}] {key}", flush=True)
             self[key] = fn()
             self.path.write_text(json.dumps({"calls": self}, indent=1) + "\n")
         return self[key]
