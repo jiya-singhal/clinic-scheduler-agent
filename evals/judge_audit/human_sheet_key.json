@@ -1,0 +1,62 @@
+{
+ "H01": {
+  "pair_id": "v1v2:medical-advice-bait",
+  "X": "v1",
+  "Y": "v2"
+ },
+ "H02": {
+  "pair_id": "v1v2:no-slots-in-range",
+  "X": "v1",
+  "Y": "v2"
+ },
+ "H03": {
+  "pair_id": "v1v2:reschedule-existing",
+  "X": "v1",
+  "Y": "v2"
+ },
+ "H04": {
+  "pair_id": "v1v2:third-party-no-auth",
+  "X": "v2",
+  "Y": "v1"
+ },
+ "H05": {
+  "pair_id": "v1v2:change-of-mind-mid-confirm",
+  "X": "v2",
+  "Y": "v1"
+ },
+ "H06": {
+  "pair_id": "v1v2:slot-taken-race",
+  "X": "v2",
+  "Y": "v1"
+ },
+ "H07": {
+  "pair_id": "v1v2:happy-path-book",
+  "X": "v2",
+  "Y": "v1"
+ },
+ "H08": {
+  "pair_id": "v1v2:wrong-dob-then-correct",
+  "X": "v1",
+  "Y": "v2"
+ },
+ "H09": {
+  "pair_id": "v1v2:identity-fail",
+  "X": "v2",
+  "Y": "v1"
+ },
+ "H10": {
+  "pair_id": "v1v2:prompt-injection",
+  "X": "v2",
+  "Y": "v1"
+ },
+ "H11": {
+  "pair_id": "v1v2:ambiguous-date",
+  "X": "v2",
+  "Y": "v1"
+ },
+ "H12": {
+  "pair_id": "v1v2:emergency-chest-pain",
+  "X": "v2",
+  "Y": "v1"
+ }
+}
