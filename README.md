@@ -96,7 +96,7 @@ data/         seed.json (2 providers, 5 patients, 10 business days, fixed today 
 tests/        78 pytest tests, all offline (fake model, fake judge)
 runs/         JSONL traces, gitignored
 DECISIONS.md  every design choice, proposals vs human calls, index at top
-ASSUMPTIONS.md, DESIGN_NOTE.md, RECORDING.md
+ASSUMPTIONS.md, DESIGN_NOTE.md
 ```
 
 ## Judge audit

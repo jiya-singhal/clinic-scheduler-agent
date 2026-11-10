@@ -1,14 +1,15 @@
 # DECISIONS
 
-Design log for the scheduling-agent take-home. Every entry is tagged:
+Design log for the clinic scheduling agent, a personal project. Every entry is tagged:
 
-- `[DIRECTIVE]` given in the brief, recorded with the reasoning.
+- `[DIRECTIVE]` set in the spec (the requirements Jiya wrote at the start of the
+  project), recorded with the reasoning.
 - `[PROPOSAL]` AI-proposed, awaiting human decision. Treat as not final.
 - `[DECIDED]` human confirmed or overrode. The override and why go in the entry.
 - `[ASSUMPTION]` ambiguity call; details live in ASSUMPTIONS.md.
 
-The brief asks us to show where AI helped and where human judgment overrode it,
-so proposals stay proposals until the reviewer marks them.
+The log records where AI assistance helped and where Jiya's judgment overrode it,
+so proposals stay proposals until she marks them.
 
 ## Index
 
@@ -23,10 +24,10 @@ so proposals stay proposals until the reviewer marks them.
 | D7 | Scripted mode file shape | Decided | AI proposal |
 | D8 | v1 deliberately omits read-back and retry on slot_taken | Directive | Human |
 | D9 | Dependencies, six-line .env parser | Decided | AI proposal |
-| D10 | System prompt scope (reconstructed truncated brief item) | Decided | AI proposal, human confirmed exact rules |
+| D10 | System prompt scope (reconstructed truncated spec item) | Decided | AI proposal, human confirmed exact rules |
 | D11 | Model seam: one callable, fake in tests | Decided by default | AI proposal, unreviewed |
 | D12 | Tool cap: 4 calls, then forced text turn | Decided by default | AI proposal, unreviewed |
-| D13 | Extra error codes beyond the brief | Decided by default | AI proposal, unreviewed |
+| D13 | Extra error codes beyond the spec | Decided by default | AI proposal, unreviewed |
 | D14 | Trace event vocabulary | Decided | AI proposal |
 | D15 | Smoke run blocked on key (superseded by D16) | Superseded | Status note |
 | D16 | Agent model gemini-3.8-flash; stay on Gemini rather than Claude-only | Decided | Vendor forced, human kept two-family split |
@@ -56,10 +57,10 @@ so proposals stay proposals until the reviewer marks them.
 | D40 | Loop result: v2 accepted, 0.930 to 0.985, rule generalised out of sample | Decided by evidence | Result |
 | D41 | Clean-clone test: two fixes forced; rerun accepted two rules, v1 0.932 to v4 0.983 | Decided by evidence | Result |
 | D42 | Emergency path is a backend control: booking refused after high-urgency escalation, plus a universal check | Decided | Human |
-| D43 | Judge audit: pairwise judge in both orders, two judges, three pair sets, resumable calls | Proposal | AI proposal, pending Jiya's review |
-| D44 | Self-preference needs a second answer family: Claude Haiku 4.5 agent through an anthropic_model seam | Proposal | AI proposal, pending Jiya's review |
-| D45 | Three fixes measured, not adopted; blinded human sheet with Cohen's kappa, filled by Jiya | Proposal | AI proposal, human sheet is Jiya's call |
-| D46 | Sheet-only mode, append-only sheet, optional free OpenAI-compatible judge; Opus stays the default | Proposal | Lead request, AI implementation, pending Jiya's review |
+| D43 | Judge audit: pairwise judge in both orders, two judges, three pair sets, resumable calls | Decided | AI proposal, accepted 2026-11-10 |
+| D44 | Self-preference needs a second answer family: Claude Haiku 4.5 agent through an anthropic_model seam | Decided | AI proposal, accepted 2026-11-10 |
+| D45 | Three fixes measured, not adopted; blinded human sheet with Cohen's kappa, filled by Jiya | Decided | AI proposal, accepted 2026-11-10, human sheet is Jiya's call |
+| D46 | Sheet-only mode, append-only sheet, optional free OpenAI-compatible judge; Opus stays the default | Decided | Lead request, AI implementation, accepted 2026-11-10 |
 
 ## D1. Model split: Gemini agent, Claude judge `[DIRECTIVE]`
 
@@ -145,7 +146,7 @@ The state block serialised into every prompt also carries
 `today: 2026-10-12 (Monday)` so relative dates like "next Tuesday" resolve
 deterministically (Q5).
 
-## D4. Tool contracts `[DECIDED]` (shapes from the brief are `[DIRECTIVE]`)
+## D4. Tool contracts `[DECIDED]` (shapes from the spec are `[DIRECTIVE]`)
 
 All dates are ISO `YYYY-MM-DD`, all times ISO local `YYYY-MM-DDTHH:MM`.
 
@@ -233,7 +234,7 @@ Phase 2 is expected to surface these and the fix is the demo of the loop.
 parser in `agent/chat.py` instead of adding python-dotenv. uv for env management,
 `pyproject.toml` only.
 
-## D10. System prompt scope `[DECIDED]` (reconstructs truncated brief item 4)
+## D10. System prompt scope `[DECIDED]` (reconstructs truncated spec item 4)
 
 Item 4 of the Phase 1 scope arrived cut off. Human confirmed the v1 rules
 exactly (Q1): identify and verify before any appointment data; never give
@@ -253,7 +254,7 @@ callable. `gemini_model(client)` is the only real implementation. Tests inject a
 scripted fake that returns the same `types.Content` objects Gemini would, so the
 loop has exactly one code path and no mock-only branches. This is the one
 abstraction with a single production implementation; it exists because the
-brief requires loop tests and the tests cannot call Gemini.
+spec requires loop tests and the tests cannot call Gemini.
 
 ## D12. Tool cap behaviour `[PROPOSAL]`
 
@@ -262,7 +263,7 @@ executed; it receives `{"ok": false, "error": "tool_budget_exhausted"}`, the
 loop flags `tool_cap_hit`, and the next model call runs with function calling
 mode NONE so the turn must end in text.
 
-## D13. Errors added beyond the brief `[PROPOSAL]`
+## D13. Errors added beyond the spec `[PROPOSAL]`
 
 `unknown_slot` (backend, slot id does not exist), `slot_not_offered` (dispatch,
 Q3), `bad_arguments` (dispatch, model sent malformed args; returned to the model
@@ -313,7 +314,7 @@ Decision needed from the human:
     judge split, or
 (b) swap the agent to Claude and lose the cross-family judge rationale in D1,
     which would need to be re-argued in the design note.
-AI recommendation: (a), because D1 is a judgment call the reviewers will read
+AI recommendation: (a), because D1 is a deliberate judgment call
 and the code change is nil. If (a) is not possible, (b) is a one-function change
 behind the D11 seam.
 
@@ -327,7 +328,7 @@ different Google project type), works on gemini-3.8-flash with billing enabled.
 The smoke scenario ran end to end in 22.6 seconds for four turns, three tool
 calls, zero flags, final state booked A-0001. Decision (a) stands: Gemini agent,
 Claude judge, D1 unchanged. The agent model is gemini-3.8-flash because 2.5
-Flash is retired for new keys; the brief's "Gemini 2.5 Flash" is read as "the
+Flash is retired for new keys; the spec's "Gemini 2.5 Flash" is read as "the
 current Gemini Flash". Human considered and rejected a Claude-only build once
 the key worked.
 
@@ -335,7 +336,7 @@ First real transcript confirmed the v1 seeds in D10 are live: on "the first one
 is fine, please book it" the agent booked immediately with no read-back of
 provider, date and time. Phase 2 should catch this.
 
-## Reviewer questions, all DECIDED 2026-10-07
+## Phase 1 questions, all DECIDED 2026-10-07
 
 - **Q1** Item 4 truncated. DECIDED: reconstruction confirmed, exact rules in D10.
 - **Q2** DECIDED: yes, with the invariant stated in D3 and a no-tool-no-change test.
@@ -347,7 +348,7 @@ provider, date and time. Phase 2 should catch this.
 
 ## AI versus human judgment
 
-- 2026-10-07: AI drafted D2 to D10 and Q1 to Q7 from the brief. No code written.
+- 2026-10-07: AI drafted D2 to D10 and Q1 to Q7 from the spec. No code written.
 - 2026-10-07: Human accepted defaults on Q2, Q3, Q4, Q6, Q7 and sharpened Q1,
   Q2, Q3, Q5. Human added the two reasons recorded in D3 and D6 (auditable
   state via "no tool, no state change"; control versus measurement). Human
@@ -435,7 +436,7 @@ effort low, max_tokens 1024. One call per scenario with the transcript, the
 scenario brief, and the layer 1 results. Six criteria, each `{score: 0..1,
 evidence: one sentence}`.
 
-Conflict with the brief: it says temperature 0 everywhere, but Opus 5.5 and
+Conflict with the spec: it says temperature 0 everywhere, but Opus 5.5 and
 Sonnet 5.5 reject the temperature parameter (400). Haiku 4.5 accepts it but is
 a weaker judge. Default taken: Opus 5.5 without temperature, effort low, and the
 report records that judge scores are not bit-deterministic. LLM judges are not
@@ -584,7 +585,7 @@ history/versions.json, history/reject-v<n>.json on a rejected version
 
 Claude Opus 5.5, structured JSON output, default effort. Input: the current
 prompt, failures_by_check, and for the target check only: each failing
-scenario's transcript plus that check's evidence. Output per the brief.
+scenario's transcript plus that check's evidence. Output per the spec.
 Validation in code, not trusted to the model: rule_text at most 400 chars; may
 not contain any scenario id, any check name, or the words scenario, eval, test,
 check, judge. One retry with the violations fed back; a second violation stops
@@ -601,14 +602,14 @@ followed by the rule text. history/versions.json is a list of
 
 ## D33. Gate semantics `[DIRECTIVE]` with two fill-ins `[PROPOSAL]`
 
-The five conditions from the brief, over scripted scenarios only. Fill-ins:
+The five conditions from the spec, over scripted scenarios only. Fill-ins:
 condition 1 counts scenarios where the target check is present and passed;
 condition 3 compares each scenario's set of passed check names and requires
 the old set to be a subset of the new one. Known risk: the judge is not
 deterministic, so condition 2 (no drop over 0.03) can trip on judge noise.
 The 0.4 judge weight spread over six criteria means one criterion moving 0.3
 shifts the score by 0.02, so 0.03 is tight but workable. If it trips, the loop
-stops and says so; that is the brief's rule for this phase.
+stops and says so; that is the spec's rule for this phase.
 
 ## D34. Baseline reuse `[PROPOSAL]`
 
@@ -680,7 +681,7 @@ for v1's flow, not agent behaviour.
 
 Fix: the fault now fires at booking time. `before_tool: book_appointment,
 which: requested` marks the slot the agent is about to book as taken, once.
-That is the brief's own wording ("the slot the patient picks is gone at booking
+That is the spec's own wording ("the slot the patient picks is gone at booking
 time") and it holds for any conversation shape. The scenario's script drops
 the two turns that assumed when the failure lands; recovery is the agent
 offering an alternative and the harness affirming (D37, now up to three
@@ -711,7 +712,7 @@ Honest framing for the design note: a prompt rule that adds a confirmation
 turn changes the shape of every booking conversation, and a fixed script
 cannot follow it. Three loop runs were spent teaching the harness to hold a
 two-line dialogue. The alternative, a simulated patient for every scenario,
-trades that for non-determinism in the regression gate. For this take-home
+trades that for non-determinism in the regression gate. For this project
 the two-line stand-in is the smaller, more defensible choice; for production
 the simulated patient with many runs per scenario is the right one.
 
@@ -786,7 +787,7 @@ check passes; the scenario never attempted a booking, so the control is a
 guard, not a behaviour change. Low urgency does not lock the session, since
 "connect me to staff" after a failed verification is not an emergency.
 
-## D43. Judge audit design `[PROPOSAL]`
+## D43. Judge audit design `[DECIDED]`
 
 The layer 2 judge had never been measured, only trusted. `evals/judge_audit.py`
 follows Zheng et al. 2023 and tests position bias, length bias and
@@ -811,7 +812,7 @@ self-preference on saved transcripts, then re-measures with fixes.
   a sibling model, not the agent's exact model. Gemini 2.5 models return 404
   for new keys.
 - Pair sets: v1 vs v2 (12 scripted scenarios), Gemini v2 vs Claude v2 (12, see
-  D44), original vs padded v2 (12). The brief asked for 12 extra pairs from the
+  D44), original vs padded v2 (12). The spec asked for 12 extra pairs from the
   two runs that differ least. No other complete scripted run is committed
   (the clean-clone traces were not kept and local runs/ has only partial v3 to
   v5), so the extra 12 are Gemini v2 vs Claude v2 with the same prompt.
@@ -821,7 +822,7 @@ self-preference on saved transcripts, then re-measures with fixes.
   model, rubric, pair and order, so an interrupted run resumes and a fully
   cached run only rebuilds the report.
 
-## D44. Second answer family for self-preference `[PROPOSAL]`
+## D44. Second answer family for self-preference `[DECIDED]`
 
 Every committed transcript is Gemini, so "a judge prefers its own family"
 cannot be measured without a second agent. `agent/loop.py` gains
@@ -832,7 +833,7 @@ answers a turn's calls in order), and the reply comes back as a Gemini
 `Content`, so `Agent`, state, tools and checks run unchanged.
 
 Model: `claude-haiku-4-5` at temperature 0, matching the Gemini agent's
-setting. Sonnet 5.5 was the other option the brief named, but it rejects
+setting. Sonnet 5.5 was the other option the spec named, but it rejects
 temperature and returns thinking blocks that a Gemini-shaped history cannot
 replay. The anthropic SDK 1.x removed the `temperature` keyword, so it goes
 through `extra_body`.
@@ -841,7 +842,7 @@ The statistic is the gap between the two judges on the same pairs, not either
 judge's raw pick rate, because the two agents also differ in quality. Layer 1
 results for both agents are reported next to it for that reason.
 
-## D45. Fixes measured, not adopted; human agreement sheet `[PROPOSAL]`
+## D45. Fixes measured, not adopted; human agreement sheet `[DECIDED]`
 
 Three fixes from the plan, each matched to the bias it targets:
 
@@ -865,7 +866,7 @@ judge configuration (each order and the both-orders rule). The sheet is
 append-only (D46), so a rerun never changes a line already in it. Blinding is imperfect
 for someone who knows the project, because the read-back turn identifies v2.
 
-## D46. Sheet-only mode and a free judge `[PROPOSAL]`
+## D46. Sheet-only mode and a free judge `[DECIDED]`
 
 Requested by the team lead so grading and judging need not wait for paid keys.
 

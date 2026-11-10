@@ -1,6 +1,6 @@
 # ASSUMPTIONS
 
-Ambiguity calls. Each one is a proposal until the reviewer confirms.
+Ambiguity calls. Each one is a proposal until Jiya confirms it.
 
 - **A1 Calendar anchor.** DECIDED. Slots start Monday 2026-10-12 and cover 10 business
   days through Friday 2026-10-23. Fixed in the seed, not relative to today, so
