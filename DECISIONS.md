@@ -804,10 +804,12 @@ self-preference on saved transcripts, then re-measures with fixes.
   a Gemini model at temperature 0 (the agent's family). The plan was
   gemini-3.8-flash, the agent's own model. On 2026-11-09 it returned 503/504
   "high demand" on every probe, even with four retries and a 90 second
-  timeout, so the Gemini judge ran on gemini-3.5-flash (set by
-  `GEMINI_JUDGE_MODEL`). The agent transcripts stay the saved 3.8 ones, so the
-  same-family judge is a sibling model, not the agent's exact model. Gemini
-  2.5 models return 404 for new keys.
+  timeout, and the same on 2026-11-10. gemini-3.5-flash stopped after 18
+  calls at the free tier's 20 requests a day. The Gemini judge therefore ran
+  on gemini-3.5-flash-lite (set by `GEMINI_JUDGE_MODEL`), 96 calls, 2026-11-10.
+  The agent transcripts stay the saved 3.8 ones, so the same-family judge is
+  a sibling model, not the agent's exact model. Gemini 2.5 models return 404
+  for new keys.
 - Pair sets: v1 vs v2 (12 scripted scenarios), Gemini v2 vs Claude v2 (12, see
   D44), original vs padded v2 (12). The brief asked for 12 extra pairs from the
   two runs that differ least. No other complete scripted run is committed
